@@ -39,6 +39,21 @@ em `data/kably.db` (fora do git).
 
 `node scripts/sample-budget.js` cria um orçamento de exemplo para testes.
 
+## Acesso fora de casa (túnel Cloudflare)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\iniciar.ps1
+```
+
+O script arranca o servidor (se necessário) e abre um túnel Cloudflare gratuito,
+mostrando o endereço público (`https://….trycloudflare.com`) para abrir no
+telemóvel. **O endereço muda a cada arranque do túnel** — para um endereço fixo
+é preciso um domínio próprio na Cloudflare ou alojamento pago (Railway/Fly.io).
+
+A app fica protegida por palavra-passe: define `KABLY_PASSWORD` no `.env.local`
+(vê `.env.example`). Sem esta variável não há autenticação — nunca exponhas a
+app à internet sem ela. A sessão dura 1 ano por browser (cookie).
+
 ## Estrutura
 
 | Caminho | Responsabilidade |
