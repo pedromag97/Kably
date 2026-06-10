@@ -121,6 +121,127 @@ export async function deleteItemAction(budgetId: number, itemId: number) {
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
+// ── Importação de MQT ─────────────────────────────────────────────────
+
+export type ImportLine = {
+  mqtText: string; // designação original no MQT
+  unit: string;
+  quantity: number;
+  choice:
+    | { kind: "article"; articleId: number }
+    | { kind: "new" } // criar artigo novo na base (custos a zero, a preencher)
+    | { kind: "loose" } // linha avulsa só neste orçamento
+    | { kind: "ignore" };
+};
+
+export type ImportMeta = {
+  title: string;
+  clientName: string;
+  vatMode: VatMode;
+};
+
+export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
+  const { CATEGORY_TO_CHAPTER, FALLBACK_CHAPTER, CHAPTER_ORDER, normalizeText } =
+    await import("@/lib/matching");
+
+  const budgetId = store.createBudget(
+    {
+      title: meta.title.trim() || "Orçamento importado de MQT",
+      clientName: meta.clientName.trim(),
+      clientNif: "",
+      clientEmail: "",
+      clientPhone: "",
+      siteAddress: "",
+      vatMode: meta.vatMode || "NORMAL",
+    },
+    [] // capítulos criados abaixo, só os que têm itens
+  );
+
+  // Resolver cada linha num item + capítulo de destino
+  const resolved: {
+    chapter: string;
+    item: {
+      articleId: number | null;
+      name: string;
+      unit: string;
+      quantity: number;
+      materialCost: number;
+      laborHours: number;
+    };
+  }[] = [];
+
+  for (const line of lines) {
+    if (line.choice.kind === "ignore") continue;
+    const quantity = line.quantity > 0 ? line.quantity : 1;
+
+    if (line.choice.kind === "article") {
+      const a = store.getArticle(line.choice.articleId);
+      if (!a) continue;
+      store.saveAlias(normalizeText(line.mqtText), a.id); // memorizar para o próximo MQT
+      resolved.push({
+        chapter: CATEGORY_TO_CHAPTER[a.category] ?? FALLBACK_CHAPTER,
+        item: {
+          articleId: a.id,
+          name: a.name,
+          unit: line.unit || a.unit,
+          quantity,
+          materialCost: a.materialCost,
+          laborHours: a.laborHours,
+        },
+      });
+    } else if (line.choice.kind === "new") {
+      const articleId = store.createArticle({
+        code: "MQT",
+        name: line.mqtText.slice(0, 200),
+        category: "Diversos",
+        unit: line.unit || "un",
+        materialCost: 0,
+        laborHours: 0,
+        notes: "Criado por importação de MQT — preencher custos",
+      });
+      store.saveAlias(normalizeText(line.mqtText), articleId);
+      resolved.push({
+        chapter: FALLBACK_CHAPTER,
+        item: {
+          articleId,
+          name: line.mqtText.slice(0, 200),
+          unit: line.unit || "un",
+          quantity,
+          materialCost: 0,
+          laborHours: 0,
+        },
+      });
+    } else {
+      // linha avulsa
+      resolved.push({
+        chapter: FALLBACK_CHAPTER,
+        item: {
+          articleId: null,
+          name: line.mqtText.slice(0, 200),
+          unit: line.unit || "un",
+          quantity,
+          materialCost: 0,
+          laborHours: 0,
+        },
+      });
+    }
+  }
+
+  // Criar só os capítulos com itens, pela ordem habitual
+  const chapters = CHAPTER_ORDER.filter((ch) =>
+    resolved.some((r) => r.chapter === ch)
+  );
+  for (const chName of chapters) {
+    const chapterId = store.addChapter(budgetId, chName);
+    for (const r of resolved.filter((x) => x.chapter === chName)) {
+      store.addItem(chapterId, r.item);
+    }
+  }
+
+  revalidatePath("/");
+  redirect(`/orcamentos/${budgetId}`);
+}
+
 // ── Artigos ───────────────────────────────────────────────────────────
 
 export async function createArticleAction(fd: FormData) {

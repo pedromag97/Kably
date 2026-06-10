@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS budget_chapters (
   name TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS mqt_aliases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  normText TEXT NOT NULL,
+  articleId INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  UNIQUE(companyId, normText)
+);
 CREATE TABLE IF NOT EXISTS budget_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   chapterId INTEGER NOT NULL REFERENCES budget_chapters(id) ON DELETE CASCADE,
@@ -189,6 +196,24 @@ export function updateArticle(id: number, a: Omit<Article, "id" | "companyId">):
 
 export function deleteArticle(id: number): void {
   db().prepare("DELETE FROM articles WHERE id=?").run(id);
+}
+
+// ── Associações MQT memorizadas ───────────────────────────────────────
+
+export function listAliases(): { normText: string; articleId: number }[] {
+  return plainAll<{ normText: string; articleId: number }>(
+    db().prepare("SELECT normText, articleId FROM mqt_aliases").all()
+  );
+}
+
+export function saveAlias(normText: string, articleId: number): void {
+  const c = getCompany();
+  db()
+    .prepare(
+      `INSERT INTO mqt_aliases (companyId, normText, articleId) VALUES (?,?,?)
+       ON CONFLICT(companyId, normText) DO UPDATE SET articleId=excluded.articleId`
+    )
+    .run(c.id, normText, articleId);
 }
 
 // ── Orçamentos ────────────────────────────────────────────────────────

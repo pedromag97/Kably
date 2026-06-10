@@ -17,6 +17,9 @@ Uso interno, preparada para evolução futura para produto multi-empresa.
   - *Cliente* — só preços finais;
   - *Interna* — custos, mão de obra e margem visíveis.
 - **Responsiva** — funciona no browser do PC e do telemóvel.
+- **Importação de MQT (Excel)** — carrega o mapa de quantidades, mapeia as
+  colunas, o Kably sugere artigos por semelhança de texto e cria o orçamento.
+  As associações confirmadas ficam memorizadas para os próximos MQT.
 
 ## Stack
 

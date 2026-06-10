@@ -49,6 +49,8 @@ identificadores de código em inglês.
 | `src/app/actions.ts` | Todas as server actions |
 | `src/app/orcamentos/` | Lista, novo, editor (`src/components/BudgetEditor.tsx`), PDF (route handler) |
 | `src/app/artigos/`, `src/app/definicoes/` | Gestão de artigos; dados da empresa + logotipo (base64 na BD) |
+| `src/lib/matching.ts` | Importação MQT: normalização PT, pontuação de semelhança, adivinha de colunas, mapa categoria→capítulo |
+| `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
 | `scripts/iniciar.ps1` | Arranca servidor + túnel Cloudflare e mostra URL pública |
 | `scripts/sample-budget.js` | Cria orçamento de exemplo na BD |
 | `docs/guia-orcamentacao.md` | Guia didático: conceitos + matemática das margens |

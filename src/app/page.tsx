@@ -12,12 +12,20 @@ export default function HomePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Orçamentos</h1>
-        <Link
-          href="/orcamentos/novo"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-        >
-          + Novo orçamento
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/orcamentos/importar"
+            className="bg-white border border-slate-300 hover:border-blue-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            ⬆ Importar MQT
+          </Link>
+          <Link
+            href="/orcamentos/novo"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            + Novo orçamento
+          </Link>
+        </div>
       </div>
 
       {budgets.length === 0 ? (
