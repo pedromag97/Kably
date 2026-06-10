@@ -73,6 +73,7 @@ export default function MqtImporter({
   const [title, setTitle] = useState("");
   const [clientName, setClientName] = useState("");
   const [vatMode, setVatMode] = useState<VatMode>("NORMAL");
+  const [laborOnly, setLaborOnly] = useState(false);
 
   const aliasMap = useMemo(
     () => new Map(aliases.map((a) => [a.normText, a.articleId])),
@@ -259,9 +260,10 @@ export default function MqtImporter({
         quantity: l.quantity,
         materialCost: a.materialCost,
         laborHours: a.laborHours,
+        materialIncluded: 0,
         position: 0,
       },
-      company
+      { ...company, laborOnly: laborOnly ? 1 : 0 }
     );
     return eur(t.price);
   }
@@ -284,7 +286,9 @@ export default function MqtImporter({
         quantity: l.quantity,
         choice: l.choice,
       }));
-    startTransition(() => importMqtAction({ title, clientName, vatMode }, payload));
+    startTransition(() =>
+      importMqtAction({ title, clientName, vatMode, laborOnly }, payload)
+    );
   }
 
   // ── Render ─────────────────────────────────────────────────────────
@@ -589,6 +593,27 @@ export default function MqtImporter({
               ))}
             </select>
           </label>
+          <fieldset className="grid gap-2 text-sm font-medium">
+            Tipo de orçamento
+            <label className="flex items-center gap-2 font-normal">
+              <input
+                type="radio"
+                name="tipoOrcamento"
+                checked={!laborOnly}
+                onChange={() => setLaborOnly(false)}
+              />
+              Completo — material + mão de obra
+            </label>
+            <label className="flex items-center gap-2 font-normal">
+              <input
+                type="radio"
+                name="tipoOrcamento"
+                checked={laborOnly}
+                onChange={() => setLaborOnly(true)}
+              />
+              Só mão de obra — material fornecido pelo cliente
+            </label>
+          </fieldset>
           <div className="flex gap-3">
             <button
               onClick={() => setStep(2)}

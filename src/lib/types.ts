@@ -42,6 +42,8 @@ export type Budget = {
   laborMargin: number;
   laborRate: number;
   validityDays: number;
+  laborOnly: number; // 1 = só mão de obra (material fornecido pelo cliente)
+  materialFeePct: number; // % de gestão sobre o material fornecido (só-MO)
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +65,7 @@ export type BudgetItem = {
   quantity: number;
   materialCost: number; // € por unidade
   laborHours: number; // horas por unidade
+  materialIncluded: number; // exceção em orçamentos só-MO: 1 = esta linha fatura material
   position: number;
 };
 

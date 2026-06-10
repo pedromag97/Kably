@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { Article, BudgetFull, BudgetItem } from "@/lib/types";
-import { budgetTotals, eur, itemTotals, VAT_MODES } from "@/lib/calc";
+import { budgetTotals, eur, itemTotals, num, VAT_MODES } from "@/lib/calc";
 import {
   addBlankItemAction,
   addChapterAction,
@@ -11,6 +11,7 @@ import {
   deleteChapterAction,
   deleteItemAction,
   renameChapterAction,
+  setItemMaterialIncludedAction,
   updateBudgetMetaAction,
   updateItemAction,
 } from "@/app/actions";
@@ -97,14 +98,34 @@ function ItemRow({
         />
       </td>
       <td className="p-1.5 w-24">
-        <input
-          value={materialCost}
-          onChange={(e) => setMaterialCost(e.target.value)}
-          onBlur={save}
-          inputMode="decimal"
-          title="Custo de material por unidade (€)"
-          className={`${inputCls} text-right`}
-        />
+        <div className="flex items-center gap-1">
+          {budget.laborOnly === 1 && (
+            <input
+              type="checkbox"
+              checked={item.materialIncluded === 1}
+              onChange={(e) =>
+                startTransition(() =>
+                  setItemMaterialIncludedAction(budget.id, item.id, e.target.checked)
+                )
+              }
+              title="Faturar material nesta linha (exceção ao modo só mão de obra)"
+            />
+          )}
+          <input
+            value={materialCost}
+            onChange={(e) => setMaterialCost(e.target.value)}
+            onBlur={save}
+            inputMode="decimal"
+            title={
+              t.billsMaterial
+                ? "Custo de material por unidade (€)"
+                : "Material por conta do cliente — não faturado (valor só para estimativa)"
+            }
+            className={`${inputCls} text-right ${
+              t.billsMaterial ? "" : "opacity-40 line-through"
+            }`}
+          />
+        </div>
       </td>
       <td className="p-1.5 w-20">
         <input
@@ -212,7 +233,15 @@ function ArticlePicker({
         <div className="overflow-y-auto">
           {filtered.map((a) => {
             const t = itemTotals(
-              { ...a, id: 0, chapterId: 0, articleId: a.id, quantity: 1, position: 0 },
+              {
+                ...a,
+                id: 0,
+                chapterId: 0,
+                articleId: a.id,
+                quantity: 1,
+                materialIncluded: 0,
+                position: 0,
+              },
               budget
             );
             return (
@@ -268,6 +297,11 @@ export default function BudgetEditor({
         <span className="font-mono text-xs bg-slate-200 rounded px-2 py-1">
           {budget.number}
         </span>
+        {budget.laborOnly === 1 && (
+          <span className="text-xs font-semibold bg-amber-100 text-amber-800 rounded px-2 py-1">
+            SÓ MÃO DE OBRA
+          </span>
+        )}
         <h1 className="text-xl font-bold flex-1 min-w-0 truncate">{budget.title}</h1>
         <a
           href={`/orcamentos/${budget.id}/pdf?v=cliente`}
@@ -361,6 +395,24 @@ export default function BudgetEditor({
               name="validityDays"
               defaultValue={budget.validityDays}
               inputMode="numeric"
+              className={inputCls}
+            />
+          </label>
+          <label className="flex items-center gap-2 font-medium col-span-2">
+            <input
+              type="checkbox"
+              name="laborOnly"
+              defaultChecked={budget.laborOnly === 1}
+            />
+            Só mão de obra (material fornecido pelo cliente)
+          </label>
+          <label className="grid gap-1 font-medium">
+            Taxa gestão material (%)
+            <input
+              name="materialFeePct"
+              defaultValue={budget.materialFeePct}
+              inputMode="decimal"
+              title="Percentagem cobrada sobre o valor estimado do material fornecido pelo cliente (receção, conferência, movimentação). 0 = não cobrar."
               className={inputCls}
             />
           </label>
@@ -475,14 +527,28 @@ export default function BudgetEditor({
         {/* Resumo */}
         <aside className="bg-white rounded-xl border border-slate-200 p-4 grid gap-2 text-sm lg:sticky lg:top-20">
           <h2 className="font-bold text-base mb-1">Resumo</h2>
+          {budget.laborOnly === 1 && (
+            <div className="text-xs bg-amber-50 text-amber-800 rounded-md px-2 py-1.5 -mt-1">
+              Só mão de obra — material por conta do cliente
+              {totals.suppliedMaterial > 0 && (
+                <> (estimativa: {eur(totals.suppliedMaterial)})</>
+              )}
+            </div>
+          )}
           <div className="flex justify-between text-slate-500">
-            <span>Custo material</span>
+            <span>Custo material{budget.laborOnly === 1 ? " (faturado)" : ""}</span>
             <span>{eur(totals.materialCost)}</span>
           </div>
           <div className="flex justify-between text-slate-500">
-            <span>Custo mão de obra</span>
+            <span>Custo mão de obra ({num(totals.laborHours)} h)</span>
             <span>{eur(totals.laborCost)}</span>
           </div>
+          {totals.materialFee > 0 && (
+            <div className="flex justify-between text-slate-500">
+              <span>Gestão material ({num(budget.materialFeePct)}%)</span>
+              <span>{eur(totals.materialFee)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-slate-500 border-b border-slate-100 pb-2">
             <span>Custo total</span>
             <span>{eur(totals.cost)}</span>

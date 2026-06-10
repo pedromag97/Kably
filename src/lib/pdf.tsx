@@ -185,6 +185,23 @@ export function BudgetPdf({
 
         <Text style={s.title}>{budget.title}</Text>
 
+        {budget.laborOnly === 1 ? (
+          <Text
+            style={{
+              fontSize: 8.5,
+              backgroundColor: "#fef3c7",
+              color: "#92400e",
+              padding: 6,
+              borderRadius: 3,
+              marginBottom: 10,
+              marginTop: -4,
+            }}
+          >
+            Orçamento de mão de obra — todo o material é fornecido pelo dono de
+            obra / cliente, salvo indicação em contrário nas condições.
+          </Text>
+        ) : null}
+
         {/* Capítulos */}
         {budget.chapters
           .filter((ch) => ch.items.length > 0)
@@ -236,12 +253,22 @@ export function BudgetPdf({
           {internal ? (
             <>
               <View style={s.totalsRow}>
-                <Text style={s.small}>Custo material</Text>
+                <Text style={s.small}>
+                  Custo material{budget.laborOnly === 1 ? " (faturado)" : ""}
+                </Text>
                 <Text style={s.small}>{fmt(totals.materialCost)}</Text>
               </View>
+              {budget.laborOnly === 1 ? (
+                <View style={s.totalsRow}>
+                  <Text style={s.small}>
+                    Material do cliente (estimativa, não faturado)
+                  </Text>
+                  <Text style={s.small}>{fmt(totals.suppliedMaterial)}</Text>
+                </View>
+              ) : null}
               <View style={s.totalsRow}>
                 <Text style={s.small}>
-                  Custo mão de obra ({fmt(budget.laborRate)}/h)
+                  Custo mão de obra ({qty(totals.laborHours)} h × {fmt(budget.laborRate)}/h)
                 </Text>
                 <Text style={s.small}>{fmt(totals.laborCost)}</Text>
               </View>
@@ -254,6 +281,12 @@ export function BudgetPdf({
                 </Text>
               </View>
             </>
+          ) : null}
+          {totals.materialFee > 0 ? (
+            <View style={s.totalsRow}>
+              <Text>Gestão de material fornecido ({qty(budget.materialFeePct)}%)</Text>
+              <Text>{fmt(totals.materialFee)}</Text>
+            </View>
           ) : null}
           <View style={[s.totalsRow, { borderTopWidth: 0.5, borderTopColor: "#cbd5e1" }]}>
             <Text>Subtotal (s/ IVA)</Text>

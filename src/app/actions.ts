@@ -47,6 +47,8 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
     laborMargin: flt(fd, "laborMargin", 35),
     laborRate: flt(fd, "laborRate", 20),
     validityDays: Math.round(flt(fd, "validityDays", 30)),
+    laborOnly: fd.get("laborOnly") ? 1 : 0,
+    materialFeePct: flt(fd, "materialFeePct", 0),
     notes: String(fd.get("notes") ?? ""),
   });
   revalidatePath(`/orcamentos/${budgetId}`);
@@ -121,6 +123,15 @@ export async function deleteItemAction(budgetId: number, itemId: number) {
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
+export async function setItemMaterialIncludedAction(
+  budgetId: number,
+  itemId: number,
+  included: boolean
+) {
+  store.setItemMaterialIncluded(itemId, included);
+  revalidatePath(`/orcamentos/${budgetId}`);
+}
+
 // ── Importação de MQT ─────────────────────────────────────────────────
 
 export type ImportLine = {
@@ -138,6 +149,7 @@ export type ImportMeta = {
   title: string;
   clientName: string;
   vatMode: VatMode;
+  laborOnly: boolean; // só mão de obra — material fornecido pelo cliente
 };
 
 export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
@@ -156,6 +168,9 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     },
     [] // capítulos criados abaixo, só os que têm itens
   );
+  if (meta.laborOnly) {
+    store.updateBudget(budgetId, { laborOnly: 1 });
+  }
 
   // Resolver cada linha num item + capítulo de destino
   const resolved: {

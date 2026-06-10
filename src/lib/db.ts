@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS budgets (
   laborMargin REAL NOT NULL DEFAULT 35,
   laborRate REAL NOT NULL DEFAULT 20,
   validityDays INTEGER NOT NULL DEFAULT 30,
+  laborOnly INTEGER NOT NULL DEFAULT 0,
+  materialFeePct REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
@@ -78,9 +80,24 @@ CREATE TABLE IF NOT EXISTS budget_items (
   quantity REAL NOT NULL DEFAULT 1,
   materialCost REAL NOT NULL DEFAULT 0,
   laborHours REAL NOT NULL DEFAULT 0,
+  materialIncluded INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0
 );
 `;
+
+// Colunas acrescentadas após a primeira versão — CREATE TABLE IF NOT EXISTS
+// não altera tabelas existentes, por isso adicionam-se aqui se faltarem.
+function migrate(conn: DatabaseSync) {
+  const addColumn = (table: string, column: string, ddl: string) => {
+    const cols = conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) {
+      conn.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    }
+  };
+  addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
+  addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
+  addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
+}
 
 declare global {
   // eslint-disable-next-line no-var
@@ -95,6 +112,7 @@ export function db(): DatabaseSync {
   conn.exec("PRAGMA foreign_keys = ON");
   conn.exec("PRAGMA journal_mode = WAL");
   conn.exec(SCHEMA);
+  migrate(conn);
   seed(conn);
   globalThis.__kablyDb = conn;
   return conn;
@@ -314,6 +332,8 @@ export function updateBudget(id: number, fields: Partial<Budget>): void {
     "laborMargin",
     "laborRate",
     "validityDays",
+    "laborOnly",
+    "materialFeePct",
     "notes",
   ] as const;
   const keys = allowed.filter((k) => fields[k] !== undefined);
@@ -389,6 +409,12 @@ export function updateItem(
       "UPDATE budget_items SET name=?, unit=?, quantity=?, materialCost=?, laborHours=? WHERE id=?"
     )
     .run(item.name, item.unit, item.quantity, item.materialCost, item.laborHours, id);
+}
+
+export function setItemMaterialIncluded(id: number, included: boolean): void {
+  db()
+    .prepare("UPDATE budget_items SET materialIncluded=? WHERE id=?")
+    .run(included ? 1 : 0, id);
 }
 
 export function deleteItem(id: number): void {
