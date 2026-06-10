@@ -19,10 +19,24 @@ type ReviewLine = {
   mqtText: string;
   unit: string;
   quantity: number;
+  noQty: boolean; // o MQT não tinha quantidade — assumido 1, a confirmar
   score: number | null; // null = sem sugestão
   fromAlias: boolean; // sugestão veio da memória de importações anteriores
   choice: Choice;
 };
+
+/** Conjunto de números de artigo que têm filhos (ex.: "4.1.1" se existir
+ *  "4.1.1.1") — esses são títulos de secção, não tarefas. */
+function buildParentSet(arts: string[]): Set<string> {
+  const parents = new Set<string>();
+  for (const art of arts) {
+    const segs = art.split(".").filter(Boolean);
+    for (let i = 1; i < segs.length; i++) {
+      parents.add(segs.slice(0, i).join("."));
+    }
+  }
+  return parents;
+}
 
 function parseQty(v: Cell): number {
   if (typeof v === "number") return v;
@@ -53,6 +67,8 @@ export default function MqtImporter({
   const [colName, setColName] = useState<number | null>(null);
   const [colUnit, setColUnit] = useState<number | null>(null);
   const [colQty, setColQty] = useState<number | null>(null);
+  const [colArt, setColArt] = useState<number | null>(null);
+  const [includeNoQty, setIncludeNoQty] = useState(true);
   const [lines, setLines] = useState<ReviewLine[]>([]);
   const [title, setTitle] = useState("");
   const [clientName, setClientName] = useState("");
@@ -105,57 +121,104 @@ export default function MqtImporter({
   }
 
   function applyGuess(s: SheetData) {
+    let name: number | null = null;
+    let unit: number | null = null;
+    let qty: number | null = null;
     for (const row of s.rows.slice(0, 10)) {
       const g = guessColumns(row);
       if (g.name !== null && g.quantity !== null && g.name !== g.quantity) {
-        setColName(g.name);
-        setColUnit(g.unit);
-        setColQty(g.quantity);
-        return;
+        name = g.name;
+        unit = g.unit;
+        qty = g.quantity;
+        break;
       }
     }
-    setColName(null);
-    setColUnit(null);
-    setColQty(null);
+    setColName(name);
+    setColUnit(unit);
+    setColQty(qty);
+    // coluna de nº de artigo: à esquerda da designação, com valores tipo "4.1.1"
+    let art: number | null = null;
+    if (name !== null) {
+      for (let c = 0; c < name; c++) {
+        const hits = s.rows
+          .slice(0, 60)
+          .filter((r) => /^\d+(\.\d+)+$/.test(String(r[c] ?? "").trim())).length;
+        if (hits >= 3) art = c;
+      }
+    }
+    setColArt(art);
   }
 
   function setColumnRole(col: number, role: string) {
     if (colName === col) setColName(null);
     if (colUnit === col) setColUnit(null);
     if (colQty === col) setColQty(null);
+    if (colArt === col) setColArt(null);
     if (role === "name") setColName(col);
     if (role === "unit") setColUnit(col);
     if (role === "qty") setColQty(col);
+    if (role === "art") setColArt(col);
   }
 
-  const importableCount = useMemo(() => {
-    if (!sheet || colName === null || colQty === null) return 0;
-    return sheet.rows.filter((r) => {
-      const name = String(r[colName] ?? "").trim();
-      const qty = parseQty(r[colQty!]);
-      return name.length > 2 && Number.isFinite(qty) && qty > 0;
-    }).length;
-  }, [sheet, colName, colQty]);
-
-  function toReview() {
-    if (!sheet || colName === null || colQty === null) return;
+  /** Linhas importáveis segundo o mapeamento atual.
+   *  Com quantidade: sempre. Sem quantidade (se ativado): só tarefas "folha"
+   *  na numeração de artigos (com filhos = título de secção), ou, sem coluna
+   *  de nº de artigo, linhas que tenham unidade preenchida. */
+  const computeLines = (): ReviewLine[] => {
+    if (!sheet || colName === null || colQty === null) return [];
+    const rows = sheet.rows;
+    let parentSet: Set<string> | null = null;
+    if (colArt !== null) {
+      const arts = rows
+        .map((r) => String(r[colArt] ?? "").trim())
+        .filter((a) => /^\d+(\.\d+)*$/.test(a));
+      parentSet = buildParentSet(arts);
+    }
     const built: ReviewLine[] = [];
-    for (const r of sheet.rows) {
+    for (const r of rows) {
       const mqtText = String(r[colName] ?? "").trim();
-      const quantity = parseQty(r[colQty]);
-      if (mqtText.length <= 2 || !Number.isFinite(quantity) || quantity <= 0) continue;
+      if (mqtText.length <= 2) continue;
       const unit = colUnit !== null ? String(r[colUnit] ?? "").trim() : "";
+      const qty = parseQty(r[colQty]);
+      const hasQty = Number.isFinite(qty) && qty > 0;
+      let include = hasQty;
+      if (!hasQty && includeNoQty) {
+        if (parentSet) {
+          const art = String(r[colArt!] ?? "").trim();
+          include = /^\d+(\.\d+)+$/.test(art) && !parentSet.has(art);
+        } else {
+          include = unit.length > 0;
+        }
+      }
+      if (!include) continue;
       const s = suggestArticle(mqtText, articles, aliasMap);
       built.push({
         mqtText,
         unit,
-        quantity,
+        quantity: hasQty ? qty : 1,
+        noQty: !hasQty,
         score: s ? s.score : null,
         fromAlias: s?.source === "alias",
         choice: s ? { kind: "article", articleId: s.articleId } : { kind: "loose" },
       });
     }
-    setLines(built);
+    return built;
+  };
+
+  const importable = useMemo(computeLines, [
+    sheet,
+    colName,
+    colUnit,
+    colQty,
+    colArt,
+    includeNoQty,
+    articles,
+    aliasMap,
+  ]);
+
+  function toReview() {
+    if (importable.length === 0) return;
+    setLines(importable);
     setTitle(fileName.replace(/\.(xlsx?|xls)$/i, ""));
     setStep(2);
   }
@@ -292,11 +355,19 @@ export default function MqtImporter({
                         <th key={c} className="p-1 bg-slate-50 border-b border-slate-200">
                           <select
                             value={
-                              colName === c ? "name" : colUnit === c ? "unit" : colQty === c ? "qty" : ""
+                              colName === c
+                                ? "name"
+                                : colUnit === c
+                                ? "unit"
+                                : colQty === c
+                                ? "qty"
+                                : colArt === c
+                                ? "art"
+                                : ""
                             }
                             onChange={(e) => setColumnRole(c, e.target.value)}
                             className={`${inputCls} w-full text-xs font-semibold ${
-                              colName === c || colUnit === c || colQty === c
+                              colName === c || colUnit === c || colQty === c || colArt === c
                                 ? "bg-blue-50 border-blue-400"
                                 : ""
                             }`}
@@ -305,6 +376,7 @@ export default function MqtImporter({
                             <option value="name">Designação</option>
                             <option value="unit">Unidade</option>
                             <option value="qty">Quantidade</option>
+                            <option value="art">Nº artigo</option>
                           </select>
                         </th>
                       ))}
@@ -323,13 +395,27 @@ export default function MqtImporter({
                   </tbody>
                 </table>
               </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={includeNoQty}
+                  onChange={(e) => setIncludeNoQty(e.target.checked)}
+                />
+                Incluir tarefas <strong>sem quantidade</strong> no MQT (entram com
+                qtd 1, marcadas ⚠ para confirmares)
+                {includeNoQty && (
+                  <span className="text-slate-400">
+                    — {importable.filter((l) => l.noQty).length} encontradas
+                  </span>
+                )}
+              </label>
               <div className="flex items-center gap-4">
                 <button
                   onClick={toReview}
-                  disabled={colName === null || colQty === null || importableCount === 0}
+                  disabled={importable.length === 0}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-5 py-2 rounded-lg text-sm font-medium"
                 >
-                  Continuar → rever {importableCount} linhas
+                  Continuar → rever {importable.length} linhas
                 </button>
                 {colName === null || colQty === null ? (
                   <span className="text-sm text-amber-600">
@@ -337,8 +423,8 @@ export default function MqtImporter({
                   </span>
                 ) : (
                   <span className="text-sm text-slate-400">
-                    Linhas sem designação ou sem quantidade válida são ignoradas
-                    (cabeçalhos, títulos de capítulo…).
+                    Cabeçalhos, notas e títulos de capítulo são ignorados. A coluna
+                    «Nº artigo» (se existir) ajuda a distinguir tarefas de títulos.
                   </span>
                 )}
               </div>
@@ -414,7 +500,15 @@ export default function MqtImporter({
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 text-right whitespace-nowrap">{l.quantity}</td>
+                    <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                      {l.noQty ? (
+                        <span className="text-red-600 font-semibold" title="O MQT não indica quantidade — assumido 1, confirma no editor">
+                          ⚠ 1
+                        </span>
+                      ) : (
+                        l.quantity
+                      )}
+                    </td>
                     <td className="px-2 py-1.5 text-center text-slate-500">{l.unit || "—"}</td>
                     <td className="px-2 py-1.5 min-w-64">
                       <select
