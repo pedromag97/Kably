@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⚡ Kably — Orçamentos de Obras de Eletricidade
 
-## Getting Started
+Plataforma web para criar orçamentos profissionais de instalações elétricas
+(residencial, comercial/industrial, ITED, fotovoltaico, mobilidade elétrica).
+Uso interno, preparada para evolução futura para produto multi-empresa.
 
-First, run the development server:
+## Funcionalidades
+
+- **Orçamentos por capítulos e artigos** — estrutura típica de eletricidade
+  pré-carregada (quadros, tubagem, aparelhagem, ITED, terras…), editável.
+- **Base de artigos PT** — ~75 artigos com preços de referência (custo de
+  material + horas de mão de obra por unidade), pesquisável e editável.
+- **Margens separadas** para material e mão de obra, ajustáveis por orçamento.
+- **IVA**: 23%, 6% (reabilitação) e autoliquidação (subempreitadas, art. 2.º
+  n.º 1 al. j) do CIVA).
+- **PDF com logotipo** em duas versões:
+  - *Cliente* — só preços finais;
+  - *Interna* — custos, mão de obra e margem visíveis.
+- **Responsiva** — funciona no browser do PC e do telemóvel.
+
+## Stack
+
+- Next.js 16 (App Router, React Server Components + Server Actions)
+- SQLite via `node:sqlite` (embutido no Node ≥ 22 — sem dependências nativas,
+  compatível com Windows ARM64)
+- `@react-pdf/renderer` para geração de PDF no servidor
+- Tailwind CSS 4
+
+## Correr
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev    # desenvolvimento — http://localhost:3000
+npm run build && npm start   # produção
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+A base de dados é criada e pré-carregada automaticamente no primeiro arranque,
+em `data/kably.db` (fora do git).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`node scripts/sample-budget.js` cria um orçamento de exemplo para testes.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Estrutura
 
-## Learn More
+| Caminho | Responsabilidade |
+|---|---|
+| `src/lib/db.ts` | Schema SQLite, seed e todas as queries |
+| `src/lib/calc.ts` | Cálculo de preços, margens, IVA e totais |
+| `src/lib/seed-data.ts` | Base de artigos PT + capítulos por defeito |
+| `src/lib/pdf.tsx` | Documento PDF (versões interna e cliente) |
+| `src/app/actions.ts` | Server actions (todas as mutações) |
+| `src/app/orcamentos/` | Lista, criação, editor e PDF de orçamentos |
+| `src/app/artigos/` | Gestão da base de artigos |
+| `src/app/definicoes/` | Dados da empresa, logotipo, margens por defeito |
 
-To learn more about Next.js, take a look at the following resources:
+## Modelo de cálculo
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Por item: `preço = material×qtd×(1+margem_mat) + horas×€/h×qtd×(1+margem_MO)`.
+Os valores de material/horas são copiados do artigo ao adicionar (snapshot) —
+alterar um artigo na base não muda orçamentos existentes.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Próximos passos (fora do MVP)
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Levantamento de medições em obra (modo mobile dedicado)
+- Envio por email/WhatsApp a partir da plataforma
+- Importação de tabelas de preços de fornecedores (Excel/CSV)
+- Multi-empresa + contas de utilizador (quando passar a produto)
