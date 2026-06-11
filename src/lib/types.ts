@@ -11,6 +11,7 @@ export type Company = {
   laborRate: number; // €/hora
   validityDays: number;
   conditions: string;
+  targetProfitPct: number; // lucro-alvo usado na página de custos
 };
 
 export type Article = {
@@ -71,3 +72,36 @@ export type BudgetItem = {
 
 export type ChapterFull = BudgetChapter & { items: BudgetItem[] };
 export type BudgetFull = Budget & { chapters: ChapterFull[] };
+
+// ── Custos da empresa ─────────────────────────────────────────────────
+
+export type Worker = {
+  id: number;
+  companyId: number;
+  name: string;
+  role: string;
+  productive: number; // 1 = fatura horas em obra
+  grossSalary: number; // bruto mensal €
+  months: number; // meses pagos/ano (14 com subsídios)
+  tsuPct: number; // % segurança social entidade patronal
+  insurancePct: number; // % seguro acidentes de trabalho
+  mealAllowance: number; // €/dia de subsídio de alimentação
+  manualAnnualCost: number; // se > 0, substitui o cálculo automático
+  workDays: number; // dias de trabalho/ano
+  hoursPerDay: number;
+  productivityPct: number; // % das horas que são faturáveis
+  position: number;
+};
+
+export type ExpensePeriod = "MONTHLY" | "YEARLY" | "ONEOFF";
+
+export type Expense = {
+  id: number;
+  companyId: number;
+  category: string;
+  name: string;
+  amount: number;
+  period: ExpensePeriod; // ONEOFF = pontual, amortizada em `years`
+  years: number;
+  position: number;
+};

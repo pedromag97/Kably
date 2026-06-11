@@ -26,6 +26,7 @@ export const viewport: Viewport = {
 const navLinks = [
   { href: "/", label: "Orçamentos" },
   { href: "/artigos", label: "Artigos" },
+  { href: "/custos", label: "Custos" },
   { href: "/definicoes", label: "Definições" },
 ];
 

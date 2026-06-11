@@ -9,6 +9,8 @@ import type {
   BudgetItem,
   BudgetChapter,
   Company,
+  Expense,
+  Worker,
 } from "./types";
 
 const SCHEMA = `
@@ -64,6 +66,33 @@ CREATE TABLE IF NOT EXISTS budget_chapters (
   name TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS workers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT '',
+  productive INTEGER NOT NULL DEFAULT 1,
+  grossSalary REAL NOT NULL DEFAULT 0,
+  months REAL NOT NULL DEFAULT 14,
+  tsuPct REAL NOT NULL DEFAULT 23.75,
+  insurancePct REAL NOT NULL DEFAULT 1.5,
+  mealAllowance REAL NOT NULL DEFAULT 6,
+  manualAnnualCost REAL NOT NULL DEFAULT 0,
+  workDays REAL NOT NULL DEFAULT 210,
+  hoursPerDay REAL NOT NULL DEFAULT 8,
+  productivityPct REAL NOT NULL DEFAULT 65,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  name TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  period TEXT NOT NULL DEFAULT 'MONTHLY',
+  years REAL NOT NULL DEFAULT 1,
+  position INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS mqt_aliases (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -97,6 +126,7 @@ function migrate(conn: DatabaseSync) {
   addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
   addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
   addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
+  addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
 }
 
 declare global {
@@ -158,7 +188,7 @@ export function getCompany(): Company {
   return plain<Company>(db().prepare("SELECT * FROM companies ORDER BY id LIMIT 1").get());
 }
 
-export function saveCompany(data: Omit<Company, "id">): void {
+export function saveCompany(data: Omit<Company, "id" | "targetProfitPct">): void {
   const c = getCompany();
   db()
     .prepare(
@@ -214,6 +244,62 @@ export function updateArticle(id: number, a: Omit<Article, "id" | "companyId">):
 
 export function deleteArticle(id: number): void {
   db().prepare("DELETE FROM articles WHERE id=?").run(id);
+}
+
+// ── Custos da empresa (trabalhadores + despesas) ──────────────────────
+
+export function listWorkers(): Worker[] {
+  return plainAll<Worker>(
+    db().prepare("SELECT * FROM workers ORDER BY position, id").all()
+  );
+}
+
+export function listExpenses(): Expense[] {
+  return plainAll<Expense>(
+    db().prepare("SELECT * FROM expenses ORDER BY category, position, id").all()
+  );
+}
+
+/** Substitui todos os trabalhadores e despesas (estratégia replace-all —
+ *  a página guarda o estado completo de uma vez). */
+export function saveCosts(
+  workers: Omit<Worker, "id" | "companyId">[],
+  expenses: Omit<Expense, "id" | "companyId">[],
+  targetProfitPct: number
+): void {
+  const c = getCompany();
+  const conn = db();
+  conn.exec("BEGIN");
+  try {
+    conn.prepare("DELETE FROM workers WHERE companyId=?").run(c.id);
+    conn.prepare("DELETE FROM expenses WHERE companyId=?").run(c.id);
+    const insW = conn.prepare(
+      `INSERT INTO workers (companyId, name, role, productive, grossSalary, months,
+       tsuPct, insurancePct, mealAllowance, manualAnnualCost, workDays, hoursPerDay,
+       productivityPct, position) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    );
+    workers.forEach((w, i) =>
+      insW.run(
+        c.id, w.name, w.role, w.productive, w.grossSalary, w.months, w.tsuPct,
+        w.insurancePct, w.mealAllowance, w.manualAnnualCost, w.workDays,
+        w.hoursPerDay, w.productivityPct, i
+      )
+    );
+    const insE = conn.prepare(
+      "INSERT INTO expenses (companyId, category, name, amount, period, years, position) VALUES (?,?,?,?,?,?,?)"
+    );
+    expenses.forEach((e, i) =>
+      insE.run(c.id, e.category, e.name, e.amount, e.period, e.years, i)
+    );
+    conn.prepare("UPDATE companies SET targetProfitPct=? WHERE id=?").run(
+      targetProfitPct,
+      c.id
+    );
+    conn.exec("COMMIT");
+  } catch (err) {
+    conn.exec("ROLLBACK");
+    throw err;
+  }
 }
 
 // ── Associações MQT memorizadas ───────────────────────────────────────

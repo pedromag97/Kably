@@ -290,6 +290,23 @@ export async function deleteArticleAction(articleId: number) {
   revalidatePath("/artigos");
 }
 
+// ── Custos da empresa ─────────────────────────────────────────────────
+
+export type CostsPayload = {
+  workers: Omit<import("@/lib/types").Worker, "id" | "companyId" | "position">[];
+  expenses: Omit<import("@/lib/types").Expense, "id" | "companyId" | "position">[];
+  targetProfitPct: number;
+};
+
+export async function saveCostsAction(payload: CostsPayload) {
+  store.saveCosts(
+    payload.workers.map((w, i) => ({ ...w, position: i })),
+    payload.expenses.map((e, i) => ({ ...e, position: i })),
+    payload.targetProfitPct
+  );
+  revalidatePath("/custos");
+}
+
 // ── Empresa ───────────────────────────────────────────────────────────
 
 export async function saveCompanyAction(fd: FormData) {
