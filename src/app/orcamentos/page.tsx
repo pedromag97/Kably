@@ -6,6 +6,12 @@ import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  SENT: { label: "Enviado", cls: "bg-blue-100 text-blue-700" },
+  ACCEPTED: { label: "Aceite", cls: "bg-emerald-100 text-emerald-700" },
+  REJECTED: { label: "Recusado", cls: "bg-red-100 text-red-700" },
+};
+
 export default async function BudgetsPage() {
   const user = await requireUser();
   const budgets = await listBudgets(user.companyId);
@@ -56,6 +62,13 @@ export default async function BudgetsPage() {
                   <div className="flex items-baseline gap-3">
                     <span className="font-mono text-xs text-slate-500">{b.number}</span>
                     <span className="font-semibold truncate">{b.title}</span>
+                    {STATUS_BADGE[b.status] && (
+                      <span
+                        className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${STATUS_BADGE[b.status].cls}`}
+                      >
+                        {STATUS_BADGE[b.status].label}
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
                     {b.clientName || "Sem cliente"} ·{" "}

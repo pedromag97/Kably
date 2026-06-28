@@ -128,6 +128,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
   expiresAt TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS password_resets (
+  token TEXT PRIMARY KEY,
+  userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expiresAt TEXT NOT NULL
+);
 `;
 
 // ── Ligação ───────────────────────────────────────────────────────────
@@ -238,6 +243,11 @@ async function migrate(c: DbClient) {
   await addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
   await addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
   await addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
+  // Partilha de orçamentos com o cliente (Fase 5)
+  await addColumn("budgets", "shareToken", "shareToken TEXT");
+  await addColumn("budgets", "status", "status TEXT NOT NULL DEFAULT 'DRAFT'");
+  await addColumn("budgets", "sentAt", "sentAt TEXT");
+  await addColumn("budgets", "decidedAt", "decidedAt TEXT");
 }
 
 // ── Mapeamento de linhas → objetos simples ────────────────────────────
@@ -805,4 +815,125 @@ export async function getSessionUser(sessionId: string): Promise<User | undefine
 export async function deleteSession(id: string): Promise<void> {
   const c = await db();
   await c.execute({ sql: "DELETE FROM sessions WHERE id=?", args: [id] });
+}
+
+// ── Recuperação de palavra-passe ──────────────────────────────────────
+
+export async function updateUserPassword(
+  userId: number,
+  passwordHash: string
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE users SET passwordHash=? WHERE id=?",
+    args: [passwordHash, userId],
+  });
+}
+
+export async function createPasswordReset(
+  token: string,
+  userId: number,
+  minutes: number
+): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      { sql: "DELETE FROM password_resets WHERE userId=?", args: [userId] },
+      {
+        sql: "INSERT INTO password_resets (token, userId, expiresAt) VALUES (?,?, datetime('now', ?))",
+        args: [token, userId, `+${Math.round(minutes)} minutes`],
+      },
+    ],
+    "write"
+  );
+}
+
+export async function getPasswordResetUserId(token: string): Promise<number | undefined> {
+  const c = await db();
+  const r = firstRow<{ userId: number }>(
+    await c.execute({
+      sql: "SELECT userId FROM password_resets WHERE token=? AND expiresAt > datetime('now')",
+      args: [token],
+    })
+  );
+  return r ? Number(r.userId) : undefined;
+}
+
+export async function deletePasswordReset(token: string): Promise<void> {
+  const c = await db();
+  await c.execute({ sql: "DELETE FROM password_resets WHERE token=?", args: [token] });
+}
+
+// ── Partilha de orçamento com o cliente ───────────────────────────────
+
+/** Garante token de partilha + marca como enviado. Devolve o token (ou null). */
+export async function prepareBudgetShare(
+  companyId: number,
+  budgetId: number,
+  newToken: string
+): Promise<string | null> {
+  const c = await db();
+  await c.execute({
+    sql: `UPDATE budgets SET shareToken=COALESCE(shareToken, ?), status='SENT',
+          sentAt=datetime('now') WHERE id=? AND companyId=?`,
+    args: [newToken, budgetId, companyId],
+  });
+  const r = firstRow<{ shareToken: string | null }>(
+    await c.execute({
+      sql: "SELECT shareToken FROM budgets WHERE id=? AND companyId=?",
+      args: [budgetId, companyId],
+    })
+  );
+  return r ? r.shareToken ?? null : null;
+}
+
+/** Orçamento por token público (sem sessão) — para a página /p/[token]. */
+export async function getBudgetByToken(token: string): Promise<BudgetFull | undefined> {
+  const c = await db();
+  const budget = firstRow<Budget>(
+    await c.execute({ sql: "SELECT * FROM budgets WHERE shareToken=?", args: [token] })
+  );
+  if (!budget) return undefined;
+  const chapters = rowsToObjects<BudgetChapter>(
+    await c.execute({
+      sql: "SELECT * FROM budget_chapters WHERE budgetId=? ORDER BY position, id",
+      args: [budget.id],
+    })
+  );
+  const items = rowsToObjects<BudgetItem>(
+    await c.execute({
+      sql: `SELECT bi.* FROM budget_items bi JOIN budget_chapters bc ON bc.id=bi.chapterId
+            WHERE bc.budgetId=? ORDER BY bi.position, bi.id`,
+      args: [budget.id],
+    })
+  );
+  return {
+    ...budget,
+    chapters: chapters.map((ch) => ({ ...ch, items: items.filter((i) => i.chapterId === ch.id) })),
+  };
+}
+
+/** Cliente aceita/recusa (só se ainda estiver SENT). Devolve o orçamento ou null. */
+export async function decideBudget(
+  token: string,
+  decision: "ACCEPTED" | "REJECTED"
+): Promise<Budget | undefined> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE budgets SET status=?, decidedAt=datetime('now') WHERE shareToken=? AND status='SENT'",
+    args: [decision, token],
+  });
+  return firstRow<Budget>(
+    await c.execute({ sql: "SELECT * FROM budgets WHERE shareToken=?", args: [token] })
+  );
+}
+
+export async function listOwnerEmails(companyId: number): Promise<string[]> {
+  const c = await db();
+  return rowsToObjects<{ email: string }>(
+    await c.execute({
+      sql: "SELECT email FROM users WHERE companyId=? AND role='owner'",
+      args: [companyId],
+    })
+  ).map((r) => r.email);
 }

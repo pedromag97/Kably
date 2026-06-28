@@ -2,10 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import crypto from "node:crypto";
 import * as store from "@/lib/db";
 import { DEFAULT_CHAPTERS } from "@/lib/seed-data";
 import { endSession, requireOwner, requireUser } from "@/lib/session";
+import { emailButton, emailLayout, getBaseUrl, sendEmail } from "@/lib/email";
 import type { VatMode } from "@/lib/types";
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 export async function logoutAction() {
   await endSession();
@@ -157,6 +163,67 @@ export async function setItemMaterialIncludedAction(
   if (!(await ownedBudget(budgetId))) return;
   await store.setItemMaterialIncluded(budgetId, itemId, included);
   revalidatePath(`/orcamentos/${budgetId}`);
+}
+
+// ── Partilha / envio do orçamento ─────────────────────────────────────
+
+/** Garante o link público (cria token + marca como enviado). */
+export async function shareLinkAction(
+  budgetId: number
+): Promise<{ link: string } | { error: string }> {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return { error: "Sem acesso." };
+  const token = crypto.randomBytes(24).toString("hex");
+  const shareToken = await store.prepareBudgetShare(companyId, budgetId, token);
+  if (!shareToken) return { error: "Não foi possível preparar o link." };
+  revalidatePath(`/orcamentos/${budgetId}`);
+  return { link: `${await getBaseUrl()}/p/${shareToken}` };
+}
+
+/** Envia o orçamento por email com o PDF (versão cliente) anexado + link. */
+export async function sendBudgetAction(
+  budgetId: number,
+  to: string,
+  subject: string,
+  message: string
+): Promise<{ ok: boolean; error?: string }> {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return { ok: false, error: "Sem acesso." };
+  const cleanTo = to.trim().toLowerCase();
+  if (!cleanTo.includes("@")) return { ok: false, error: "Email do cliente inválido." };
+
+  const budget = await store.getBudget(companyId, budgetId);
+  if (!budget) return { ok: false, error: "Orçamento não encontrado." };
+  const token = crypto.randomBytes(24).toString("hex");
+  const shareToken = await store.prepareBudgetShare(companyId, budgetId, token);
+  if (!shareToken) return { ok: false, error: "Falha ao preparar a partilha." };
+
+  const company = await store.getCompany(companyId);
+  const link = `${await getBaseUrl()}/p/${shareToken}`;
+
+  const { renderToBuffer } = await import("@react-pdf/renderer");
+  const { BudgetPdf } = await import("@/lib/pdf");
+  const pdf = await renderToBuffer(
+    BudgetPdf({ budget: { ...budget, status: "SENT" }, company, internal: false })
+  );
+  const content = Buffer.from(pdf).toString("base64");
+
+  const html = emailLayout(
+    `Orçamento ${budget.number}`,
+    `<p>${escapeHtml(message).replace(/\n/g, "<br>")}</p>
+     ${emailButton(link, "Ver o orçamento online")}
+     <p style="font-size:13px;color:#64748b">Pode também abrir o PDF em anexo. Pelo link consegue aceitar ou recusar.</p>`
+  );
+
+  const res = await sendEmail({
+    to: cleanTo,
+    subject: subject.trim() || `Orçamento ${budget.number}`,
+    html,
+    replyTo: company.email || undefined,
+    attachments: [{ filename: `${budget.number}.pdf`, content }],
+  });
+  revalidatePath(`/orcamentos/${budgetId}`);
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
 }
 
 // ── Importação de MQT ─────────────────────────────────────────────────

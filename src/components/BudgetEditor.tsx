@@ -15,6 +15,13 @@ import {
   updateBudgetMetaAction,
   updateItemAction,
 } from "@/app/actions";
+import ShareBudget from "@/components/ShareBudget";
+
+const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  SENT: { label: "Enviado", cls: "bg-blue-100 text-blue-700" },
+  ACCEPTED: { label: "Aceite", cls: "bg-emerald-100 text-emerald-700" },
+  REJECTED: { label: "Recusado", cls: "bg-red-100 text-red-700" },
+};
 
 const inputCls =
   "border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
@@ -291,12 +298,19 @@ export default function BudgetEditor({
     <div className="grid gap-5">
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-slate-700 text-sm">
+        <Link href="/orcamentos" className="text-slate-400 hover:text-slate-700 text-sm">
           ← Orçamentos
         </Link>
         <span className="font-mono text-xs bg-slate-200 rounded px-2 py-1">
           {budget.number}
         </span>
+        {STATUS_BADGE[budget.status] && (
+          <span
+            className={`text-xs font-semibold rounded px-2 py-1 ${STATUS_BADGE[budget.status].cls}`}
+          >
+            {STATUS_BADGE[budget.status].label}
+          </span>
+        )}
         {budget.laborOnly === 1 && (
           <span className="text-xs font-semibold bg-amber-100 text-amber-800 rounded px-2 py-1">
             SÓ MÃO DE OBRA
@@ -306,7 +320,7 @@ export default function BudgetEditor({
         <a
           href={`/orcamentos/${budget.id}/pdf?v=cliente`}
           target="_blank"
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
+          className="bg-white border border-slate-300 hover:border-slate-400 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium"
         >
           PDF Cliente
         </a>
@@ -317,6 +331,11 @@ export default function BudgetEditor({
         >
           PDF Interno
         </a>
+        <ShareBudget
+          budgetId={budget.id}
+          number={budget.number}
+          clientEmail={budget.clientEmail}
+        />
       </div>
 
       {/* Dados do orçamento */}

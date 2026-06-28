@@ -4,7 +4,16 @@ import { NextResponse, type NextRequest } from "next/server";
 // (sessão na BD, expiração) é feita server-side em requireUser(). Aqui não há
 // acesso a BD nem node:crypto — só presença do cookie, para a UX de redirect.
 const SESSION_COOKIE = "kably_session";
-const PUBLIC_PREFIXES = ["/login", "/registo", "/setup", "/_next", "/favicon.ico"];
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/registo",
+  "/setup",
+  "/recuperar",
+  "/repor",
+  "/p/", // vista pública do orçamento (link partilhado)
+  "/_next",
+  "/favicon.ico",
+];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

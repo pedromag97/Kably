@@ -48,6 +48,12 @@ export default async function LoginPage({
           Palavra-passe
           <input name="password" type="password" required className={inputCls} />
         </label>
+        <Link
+          href="/recuperar"
+          className="text-xs text-slate-500 hover:underline -mt-2 justify-self-end"
+        >
+          Esqueceste-te da palavra-passe?
+        </Link>
         {erro && (
           <p className="text-sm text-red-600 text-center">
             Email ou palavra-passe incorretos.
