@@ -59,9 +59,12 @@ identificadores de código em inglês.
   artigos + dono; `/login` é a entrada (link Criar conta); `/setup` só reclama a
   empresa legada quando `users` está vazia. **Isolamento testado A vs B.**
   - Empresa do Pedro: id 1, "Lousacabo…", dono `pedromag997@gmail.com` (com BOSCH).
-- **Próximo (Fase 4/5):** landing público + convites por email; recuperação de
-  password e envio de orçamentos por email (precisa de Resend); RGPD antes de
-  abrir a outras empresas a sério.
+- **Landing pública (Fase 4):** `/` é a página de marketing (hero, funcionalidades,
+  preços dos planos Grátis/Pro 14,90€/Equipas 29,90€) — quem tem sessão é
+  reencaminhado para `/orcamentos`. A app vive em `/orcamentos` (a lista mudou de
+  `/`). Planos são só informativos (beta tudo desbloqueado); pagamentos a definir.
+- **Próximo (Fase 5):** email (Resend) — recuperação de password e envio de
+  orçamentos ao cliente; depois convites de equipa por email e RGPD (Fase 6).
 
 ## Mapa do código
 
@@ -75,7 +78,8 @@ identificadores de código em inglês.
 | `src/proxy.ts` | Gate grosseiro no edge: redireciona para `/login` se não houver cookie `kably_session` (validação real é server-side em `requireUser`) |
 | `src/app/setup/`, `src/app/login/`, `src/app/equipa/` | Criar 1.º dono; login email+password; gestão de equipa (owner-only) |
 | `src/app/actions.ts` | Todas as server actions |
-| `src/app/orcamentos/` | Lista, novo, editor (`src/components/BudgetEditor.tsx`), PDF (route handler) |
+| `src/app/page.tsx` | Landing pública (marketing + preços). `/orcamentos` redireciona p/ cá se houver sessão? não — landing redireciona logados p/ `/orcamentos` |
+| `src/app/orcamentos/` | `page.tsx` = lista; `novo`, `[id]` editor (`BudgetEditor.tsx`), `importar`, `[id]/pdf` |
 | `src/app/artigos/`, `src/app/definicoes/` | Gestão de artigos; dados da empresa + logotipo (base64 na BD) |
 | `src/lib/matching.ts` | Importação MQT: normalização PT, pontuação de semelhança, adivinha de colunas, mapa categoria→capítulo |
 | `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
