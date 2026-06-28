@@ -1,34 +1,53 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createUser, deleteUser, listUsers } from "@/lib/db";
-import { hashPassword, requireOwner } from "@/lib/session";
+import crypto from "node:crypto";
+import {
+  createInvite,
+  deleteUser,
+  getCompany,
+  getUserByEmail,
+  listInvites,
+  listUsers,
+  revokeInvite,
+} from "@/lib/db";
+import { requireOwner } from "@/lib/session";
+import { emailButton, emailLayout, getBaseUrl, sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
 const inputCls =
   "border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
 
-async function addUserAction(fd: FormData) {
+async function inviteUserAction(fd: FormData) {
   "use server";
   const owner = await requireOwner();
-  const name = String(fd.get("name") ?? "").trim();
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
-  const password = String(fd.get("password") ?? "");
   const role = String(fd.get("role") ?? "member") === "owner" ? "owner" : "member";
-  if (!email.includes("@") || password.length < 8) redirect("/equipa?erro=dados");
-  let failed = false;
-  try {
-    await createUser({
-      companyId: owner.companyId,
-      email,
-      passwordHash: await hashPassword(password),
-      name,
-      role,
-    });
-  } catch {
-    failed = true; // email duplicado (UNIQUE)
-  }
-  if (failed) redirect("/equipa?erro=email");
+  if (!email.includes("@")) redirect("/equipa?erro=dados");
+  if (await getUserByEmail(email)) redirect("/equipa?erro=existe");
+
+  const token = crypto.randomBytes(24).toString("hex");
+  await createInvite(owner.companyId, token, email, role, 7);
+  const company = await getCompany(owner.companyId);
+  const link = `${await getBaseUrl()}/convite/${token}`;
+  await sendEmail({
+    to: email,
+    subject: `Convite para a ${company.name} no Kably`,
+    html: emailLayout(
+      "Foste convidado",
+      `<p>Foste convidado para te juntares à <strong>${company.name}</strong> no Kably.</p>
+       ${emailButton(link, "Aceitar convite")}
+       <p style="font-size:13px;color:#64748b">O convite expira em 7 dias.</p>`
+    ),
+  });
+  revalidatePath("/equipa");
+  redirect("/equipa?convidado=1");
+}
+
+async function revokeInviteAction(fd: FormData) {
+  "use server";
+  const owner = await requireOwner();
+  await revokeInvite(owner.companyId, String(fd.get("token") ?? ""));
   revalidatePath("/equipa");
   redirect("/equipa");
 }
@@ -44,27 +63,37 @@ async function removeUserAction(fd: FormData) {
 }
 
 const ERROS: Record<string, string> = {
-  dados: "Verifica o email e usa uma palavra-passe com pelo menos 8 caracteres.",
-  email: "Já existe uma conta com esse email.",
+  dados: "Escreve um email válido.",
+  existe: "Já existe uma conta com esse email.",
   auto: "Não te podes remover a ti próprio.",
 };
 
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; convidado?: string }>;
 }) {
   const me = await requireOwner();
-  const [users, { erro }] = await Promise.all([listUsers(me.companyId), searchParams]);
+  const [users, invites, sp] = await Promise.all([
+    listUsers(me.companyId),
+    listInvites(me.companyId),
+    searchParams,
+  ]);
 
   return (
     <div className="max-w-3xl mx-auto grid gap-6">
       <h1 className="text-2xl font-bold">Equipa</h1>
 
-      {erro && ERROS[erro] && (
-        <p className="bg-red-50 text-red-700 text-sm rounded-lg px-4 py-2">{ERROS[erro]}</p>
+      {sp.erro && ERROS[sp.erro] && (
+        <p className="bg-red-50 text-red-700 text-sm rounded-lg px-4 py-2">{ERROS[sp.erro]}</p>
+      )}
+      {sp.convidado && (
+        <p className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-4 py-2">
+          Convite enviado por email.
+        </p>
       )}
 
+      {/* Utilizadores */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -98,10 +127,7 @@ export default async function TeamPage({
                   {u.id !== me.id && (
                     <form action={removeUserAction}>
                       <input type="hidden" name="userId" value={u.id} />
-                      <button
-                        type="submit"
-                        className="text-slate-400 hover:text-red-600 text-xs"
-                      >
+                      <button type="submit" className="text-slate-400 hover:text-red-600 text-xs">
                         Remover
                       </button>
                     </form>
@@ -113,22 +139,36 @@ export default async function TeamPage({
         </table>
       </div>
 
+      {/* Convites pendentes */}
+      {invites.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 grid gap-2">
+          <h2 className="font-bold text-sm">Convites pendentes</h2>
+          {invites.map((inv) => (
+            <div key={inv.token} className="flex items-center gap-2 text-sm">
+              <span className="flex-1 text-slate-600">{inv.email}</span>
+              <span className="text-xs text-slate-400">
+                {inv.role === "owner" ? "Dono" : "Membro"}
+              </span>
+              <form action={revokeInviteAction}>
+                <input type="hidden" name="token" value={inv.token} />
+                <button type="submit" className="text-slate-400 hover:text-red-600 text-xs">
+                  Revogar
+                </button>
+              </form>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Convidar */}
       <form
-        action={addUserAction}
+        action={inviteUserAction}
         className="bg-white rounded-xl border border-slate-200 p-5 grid sm:grid-cols-2 gap-3"
       >
-        <h2 className="sm:col-span-2 font-bold">Adicionar membro</h2>
-        <label className="grid gap-1 text-sm font-medium">
-          Nome
-          <input name="name" className={inputCls} />
-        </label>
+        <h2 className="sm:col-span-2 font-bold">Convidar membro</h2>
         <label className="grid gap-1 text-sm font-medium">
           Email *
           <input name="email" type="email" required className={inputCls} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Palavra-passe (mín. 8) *
-          <input name="password" type="password" required minLength={8} className={inputCls} />
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Papel
@@ -142,11 +182,10 @@ export default async function TeamPage({
             type="submit"
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
           >
-            Adicionar
+            Enviar convite
           </button>
           <p className="text-xs text-slate-400 mt-2">
-            Define-lhe uma palavra-passe inicial e partilha-a; o membro entra com o email
-            e essa palavra-passe.
+            A pessoa recebe um email com um link para definir a sua própria palavra-passe.
           </p>
         </div>
       </form>

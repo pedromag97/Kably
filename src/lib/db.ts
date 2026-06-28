@@ -133,6 +133,13 @@ CREATE TABLE IF NOT EXISTS password_resets (
   userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expiresAt TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS invites (
+  token TEXT PRIMARY KEY,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member',
+  expiresAt TEXT NOT NULL
+);
 `;
 
 // ── Ligação ───────────────────────────────────────────────────────────
@@ -936,4 +943,114 @@ export async function listOwnerEmails(companyId: number): Promise<string[]> {
       args: [companyId],
     })
   ).map((r) => r.email);
+}
+
+// ── Convites de equipa ────────────────────────────────────────────────
+
+export type Invite = { token: string; companyId: number; email: string; role: string; expiresAt: string };
+
+export async function createInvite(
+  companyId: number,
+  token: string,
+  email: string,
+  role: string,
+  days: number
+): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      {
+        sql: "DELETE FROM invites WHERE companyId=? AND email=?",
+        args: [companyId, email.trim().toLowerCase()],
+      },
+      {
+        sql: "INSERT INTO invites (token, companyId, email, role, expiresAt) VALUES (?,?,?,?, datetime('now', ?))",
+        args: [token, companyId, email.trim().toLowerCase(), role, `+${Math.round(days)} days`],
+      },
+    ],
+    "write"
+  );
+}
+
+export async function getInvite(token: string): Promise<Invite | undefined> {
+  const c = await db();
+  return firstRow<Invite>(
+    await c.execute({
+      sql: "SELECT * FROM invites WHERE token=? AND expiresAt > datetime('now')",
+      args: [token],
+    })
+  );
+}
+
+export async function listInvites(companyId: number): Promise<Invite[]> {
+  const c = await db();
+  return rowsToObjects<Invite>(
+    await c.execute({
+      sql: "SELECT * FROM invites WHERE companyId=? ORDER BY email",
+      args: [companyId],
+    })
+  );
+}
+
+export async function deleteInvite(token: string): Promise<void> {
+  const c = await db();
+  await c.execute({ sql: "DELETE FROM invites WHERE token=?", args: [token] });
+}
+
+export async function revokeInvite(companyId: number, token: string): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "DELETE FROM invites WHERE token=? AND companyId=?",
+    args: [token, companyId],
+  });
+}
+
+// ── Exportar / apagar empresa (RGPD) ──────────────────────────────────
+
+export async function exportCompanyData(companyId: number): Promise<unknown> {
+  const [company, articles, budgetList, workers, expenses, users] = await Promise.all([
+    getCompany(companyId),
+    listArticles(companyId),
+    listBudgets(companyId),
+    listWorkers(companyId),
+    listExpenses(companyId),
+    listUsers(companyId),
+  ]);
+  const budgets = await Promise.all(budgetList.map((b) => getBudget(companyId, b.id)));
+  return {
+    exportadoEm: new Date().toISOString(),
+    empresa: company,
+    utilizadores: users.map(({ passwordHash, ...u }) => u),
+    artigos: articles,
+    orcamentos: budgets,
+    trabalhadores: workers,
+    despesas: expenses,
+  };
+}
+
+/** Apaga a empresa e TODOS os dados associados (cascata explícita, atómica). */
+export async function deleteCompany(companyId: number): Promise<void> {
+  const c = await db();
+  const a = [companyId];
+  await c.batch(
+    [
+      {
+        sql: `DELETE FROM budget_items WHERE chapterId IN
+              (SELECT bc.id FROM budget_chapters bc JOIN budgets b ON b.id=bc.budgetId WHERE b.companyId=?)`,
+        args: a,
+      },
+      { sql: "DELETE FROM budget_chapters WHERE budgetId IN (SELECT id FROM budgets WHERE companyId=?)", args: a },
+      { sql: "DELETE FROM budgets WHERE companyId=?", args: a },
+      { sql: "DELETE FROM mqt_aliases WHERE companyId=?", args: a },
+      { sql: "DELETE FROM articles WHERE companyId=?", args: a },
+      { sql: "DELETE FROM workers WHERE companyId=?", args: a },
+      { sql: "DELETE FROM expenses WHERE companyId=?", args: a },
+      { sql: "DELETE FROM sessions WHERE userId IN (SELECT id FROM users WHERE companyId=?)", args: a },
+      { sql: "DELETE FROM password_resets WHERE userId IN (SELECT id FROM users WHERE companyId=?)", args: a },
+      { sql: "DELETE FROM invites WHERE companyId=?", args: a },
+      { sql: "DELETE FROM users WHERE companyId=?", args: a },
+      { sql: "DELETE FROM companies WHERE id=?", args: a },
+    ],
+    "write"
+  );
 }

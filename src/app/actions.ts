@@ -18,6 +18,14 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+/** Apaga a empresa e todos os dados (só dono). Irreversível. */
+export async function deleteAccountAction() {
+  const user = await requireOwner();
+  await store.deleteCompany(user.companyId);
+  await endSession();
+  redirect("/");
+}
+
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
 }

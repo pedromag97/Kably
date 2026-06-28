@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { countUsers, getUserByEmail } from "@/lib/db";
 import { startSession, verifyPassword } from "@/lib/session";
+import { clientKey, rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ const inputCls =
 
 async function loginAction(fd: FormData) {
   "use server";
+  if (!rateLimit(await clientKey("login"), 8, 60_000)) {
+    redirect("/login?erro=rate");
+  }
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
   const user = await getUserByEmail(email);
@@ -56,7 +60,9 @@ export default async function LoginPage({
         </Link>
         {erro && (
           <p className="text-sm text-red-600 text-center">
-            Email ou palavra-passe incorretos.
+            {erro === "rate"
+              ? "Demasiadas tentativas. Aguarda um minuto e tenta de novo."
+              : "Email ou palavra-passe incorretos."}
           </p>
         )}
         <button

@@ -10,6 +10,9 @@ const PUBLIC_PREFIXES = [
   "/setup",
   "/recuperar",
   "/repor",
+  "/convite/", // aceitar convite de equipa
+  "/privacidade",
+  "/termos",
   "/p/", // vista pública do orçamento (link partilhado)
   "/_next",
   "/favicon.ico",

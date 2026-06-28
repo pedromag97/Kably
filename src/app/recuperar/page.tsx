@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import { createPasswordReset, getUserByEmail } from "@/lib/db";
 import { emailButton, emailLayout, getBaseUrl, sendEmail } from "@/lib/email";
+import { clientKey, rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,10 @@ const inputCls =
 
 async function requestResetAction(fd: FormData) {
   "use server";
+  // Limita pedidos (anti-abuso). Se excedido, responde como sempre (sem enviar).
+  const allowed = rateLimit(await clientKey("reset"), 5, 60_000);
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
-  const user = await getUserByEmail(email);
+  const user = allowed ? await getUserByEmail(email) : undefined;
   if (user) {
     const token = crypto.randomBytes(32).toString("hex");
     await createPasswordReset(token, user.id, 60);

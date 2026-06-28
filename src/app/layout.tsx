@@ -104,8 +104,15 @@ export default async function RootLayout({
           </div>
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 py-6 flex-1">{children}</main>
-        <footer className="text-center text-xs text-slate-400 py-4">
-          Kably — orçamentação de obras de eletricidade
+        <footer className="text-center text-xs text-slate-400 py-4 flex flex-wrap justify-center gap-x-3 gap-y-1">
+          <span>Kably — orçamentação de obras de eletricidade</span>
+          <span className="hidden sm:inline">·</span>
+          <Link href="/privacidade" className="hover:underline">
+            Privacidade
+          </Link>
+          <Link href="/termos" className="hover:underline">
+            Termos
+          </Link>
         </footer>
       </body>
     </html>
