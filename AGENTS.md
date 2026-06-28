@@ -80,6 +80,16 @@ identificadores de código em inglês.
 - **Falta para lançamento real:** preencher os `[campos]` legais; `RESEND_API_KEY`
   (entrega de emails) + domínio verificado (`EMAIL_FROM`); opcional `SENTRY_DSN`;
   e, quando quiser cobrar, faturação (Stripe) — a base (planos na landing) está pronta.
+- **Preços de fornecedores (módulo):** tabelas `suppliers` + `price_entries`
+  (`price_entries` guarda `supplierName` desnormalizado para o histórico sobreviver
+  à remoção do fornecedor — FK `ON DELETE SET NULL`). `/fornecedores` gere a lista
+  do Pedro (Rexel, Sonepar, CEF…). Cada artigo tem página de detalhe `/artigos/[id]`:
+  comparação entre fornecedores (mais barato destacado + botão **Adotar preço** →
+  grava em `materialCost` via `setArticleCost`), histórico datado + mini-gráfico
+  SVG (sparkline), e entrada manual de cotação. Upload de cotação Excel em
+  `/artigos/cotacao` (assistente 3 passos: fornecedor+data+ficheiro → mapa de
+  colunas/revisão com auto-matching pela engine `matching.ts` → cria/associa
+  artigos e regista preços). Tudo escopado por `companyId`.
 
 ## Mapa do código
 
@@ -96,6 +106,9 @@ identificadores de código em inglês.
 | `src/app/page.tsx` | Landing pública (marketing + preços). `/orcamentos` redireciona p/ cá se houver sessão? não — landing redireciona logados p/ `/orcamentos` |
 | `src/app/orcamentos/` | `page.tsx` = lista; `novo`, `[id]` editor (`BudgetEditor.tsx`), `importar`, `[id]/pdf` |
 | `src/app/artigos/`, `src/app/definicoes/` | Gestão de artigos; dados da empresa + logotipo (base64 na BD) |
+| `src/app/fornecedores/` + `SuppliersManager.tsx` | Lista de fornecedores (CRUD simples) |
+| `src/app/artigos/[id]/` + `ArticleDetail.tsx` | Detalhe do artigo: comparar fornecedores, adotar preço, histórico + sparkline, cotação manual |
+| `src/app/artigos/cotacao/` + `QuoteImporter.tsx` | Importar cotação de fornecedor (Excel → matching → `price_entries`) |
 | `src/lib/matching.ts` | Importação MQT: normalização PT, pontuação de semelhança, adivinha de colunas, mapa categoria→capítulo |
 | `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
 | `scripts/iniciar.ps1` | Arranca servidor + túnel Cloudflare e mostra URL pública |

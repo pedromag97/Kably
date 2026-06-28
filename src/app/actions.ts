@@ -393,6 +393,110 @@ export async function deleteArticleAction(articleId: number) {
   revalidatePath("/artigos");
 }
 
+// ── Fornecedores e preços de material ─────────────────────────────────
+
+export async function createSupplierAction(fd: FormData) {
+  const user = await requireUser();
+  const name = str(fd, "name");
+  if (name) await store.createSupplier(user.companyId, name);
+  revalidatePath("/fornecedores");
+}
+
+export async function deleteSupplierAction(supplierId: number) {
+  const user = await requireUser();
+  await store.deleteSupplier(user.companyId, supplierId);
+  revalidatePath("/fornecedores");
+}
+
+/** Adiciona uma cotação datada a um artigo (entrada manual). */
+export async function addPriceEntryAction(articleId: number, fd: FormData) {
+  const user = await requireUser();
+  const supplierId = Math.round(flt(fd, "supplierId", 0)) || null;
+  let supplierName = str(fd, "supplierName");
+  if (supplierId) {
+    const sup = (await store.listSuppliers(user.companyId)).find((s) => s.id === supplierId);
+    if (sup) supplierName = sup.name;
+  }
+  const price = flt(fd, "price", 0);
+  const date = str(fd, "date") || new Date().toISOString().slice(0, 10);
+  await store.addPriceEntry(user.companyId, articleId, supplierId, supplierName, price, date);
+  revalidatePath(`/artigos/${articleId}`);
+}
+
+export async function deletePriceEntryAction(articleId: number, entryId: number) {
+  const user = await requireUser();
+  await store.deletePriceEntry(user.companyId, entryId);
+  revalidatePath(`/artigos/${articleId}`);
+}
+
+/** Adota um preço como o custo de material do artigo (usado nos orçamentos). */
+export async function adoptPriceAction(articleId: number, price: number) {
+  const user = await requireUser();
+  await store.setArticleCost(user.companyId, articleId, price);
+  revalidatePath(`/artigos/${articleId}`);
+  revalidatePath("/artigos");
+}
+
+// ── Importação de cotação de fornecedor (Excel) ───────────────────────
+
+export type QuoteLine = {
+  text: string;
+  unit: string;
+  price: number;
+  choice:
+    | { kind: "article"; articleId: number }
+    | { kind: "new" }
+    | { kind: "ignore" };
+};
+
+export type QuoteMeta = { supplierId: number | null; date: string };
+
+/** Cria entradas de preço (cotação datada) a partir de um ficheiro de fornecedor.
+ *  Para linhas "new" cria o artigo na base com o preço como custo de material. */
+export async function importQuoteAction(
+  meta: QuoteMeta,
+  lines: QuoteLine[]
+): Promise<{ added: number; created: number }> {
+  const user = await requireUser();
+  const companyId = user.companyId;
+  const { normalizeText } = await import("@/lib/matching");
+
+  let supplierName = "";
+  const supplierId = meta.supplierId ?? null;
+  if (supplierId) {
+    const sup = (await store.listSuppliers(companyId)).find((s) => s.id === supplierId);
+    if (sup) supplierName = sup.name;
+  }
+  const date = meta.date || new Date().toISOString().slice(0, 10);
+
+  let added = 0;
+  let created = 0;
+  for (const line of lines) {
+    if (line.choice.kind === "ignore") continue;
+    let articleId: number;
+    if (line.choice.kind === "article") {
+      articleId = line.choice.articleId;
+    } else {
+      articleId = await store.createArticle(companyId, {
+        code: "",
+        name: line.text.slice(0, 200),
+        category: "Diversos",
+        unit: line.unit || "un",
+        materialCost: line.price,
+        laborHours: 0,
+        notes: "Criado por importação de cotação de fornecedor",
+      });
+      await store.saveAlias(companyId, normalizeText(line.text), articleId);
+      created++;
+    }
+    await store.addPriceEntry(companyId, articleId, supplierId, supplierName, line.price, date);
+    added++;
+  }
+
+  revalidatePath("/artigos");
+  return { added, created };
+}
+
 // ── Custos da empresa (só dono) ───────────────────────────────────────
 
 export type CostsPayload = {

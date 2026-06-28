@@ -35,6 +35,7 @@ export default async function RootLayout({
   const links = [
     { href: "/orcamentos", label: "Orçamentos" },
     { href: "/artigos", label: "Artigos" },
+    { href: "/fornecedores", label: "Fornecedores" },
     ...(user?.role === "owner"
       ? [
           { href: "/custos", label: "Custos" },

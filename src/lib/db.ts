@@ -10,6 +10,8 @@ import type {
   BudgetChapter,
   Company,
   Expense,
+  PriceEntry,
+  Supplier,
   User,
   Worker,
 } from "./types";
@@ -139,6 +141,21 @@ CREATE TABLE IF NOT EXISTS invites (
   email TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'member',
   expiresAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS price_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  articleId INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  supplierId INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+  supplierName TEXT NOT NULL DEFAULT '',
+  price REAL NOT NULL DEFAULT 0,
+  date TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
 
@@ -1041,6 +1058,8 @@ export async function deleteCompany(companyId: number): Promise<void> {
       },
       { sql: "DELETE FROM budget_chapters WHERE budgetId IN (SELECT id FROM budgets WHERE companyId=?)", args: a },
       { sql: "DELETE FROM budgets WHERE companyId=?", args: a },
+      { sql: "DELETE FROM price_entries WHERE companyId=?", args: a },
+      { sql: "DELETE FROM suppliers WHERE companyId=?", args: a },
       { sql: "DELETE FROM mqt_aliases WHERE companyId=?", args: a },
       { sql: "DELETE FROM articles WHERE companyId=?", args: a },
       { sql: "DELETE FROM workers WHERE companyId=?", args: a },
@@ -1053,4 +1072,84 @@ export async function deleteCompany(companyId: number): Promise<void> {
     ],
     "write"
   );
+}
+
+// ── Fornecedores e preços ─────────────────────────────────────────────
+
+export async function listSuppliers(companyId: number): Promise<Supplier[]> {
+  const c = await db();
+  return rowsToObjects<Supplier>(
+    await c.execute({ sql: "SELECT * FROM suppliers WHERE companyId=? ORDER BY name", args: [companyId] })
+  );
+}
+
+export async function createSupplier(companyId: number, name: string): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO suppliers (companyId, name) VALUES (?,?)",
+    args: [companyId, name.trim()],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function deleteSupplier(companyId: number, id: number): Promise<void> {
+  const c = await db();
+  // mantém o histórico (preserva supplierName), só desliga a referência
+  await c.batch(
+    [
+      { sql: "UPDATE price_entries SET supplierId=NULL WHERE supplierId=? AND companyId=?", args: [id, companyId] },
+      { sql: "DELETE FROM suppliers WHERE id=? AND companyId=?", args: [id, companyId] },
+    ],
+    "write"
+  );
+}
+
+export async function listPriceEntries(
+  companyId: number,
+  articleId: number
+): Promise<PriceEntry[]> {
+  const c = await db();
+  return rowsToObjects<PriceEntry>(
+    await c.execute({
+      sql: "SELECT * FROM price_entries WHERE companyId=? AND articleId=? ORDER BY date, id",
+      args: [companyId, articleId],
+    })
+  );
+}
+
+export async function addPriceEntry(
+  companyId: number,
+  articleId: number,
+  supplierId: number | null,
+  supplierName: string,
+  price: number,
+  date: string
+): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO price_entries (companyId, articleId, supplierId, supplierName, price, date) VALUES (?,?,?,?,?,?)",
+    args: [companyId, articleId, supplierId, supplierName, price, date],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function deletePriceEntry(companyId: number, id: number): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "DELETE FROM price_entries WHERE id=? AND companyId=?",
+    args: [id, companyId],
+  });
+}
+
+/** Adota um custo no artigo (atualiza o materialCost usado nos orçamentos). */
+export async function setArticleCost(
+  companyId: number,
+  articleId: number,
+  materialCost: number
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE articles SET materialCost=? WHERE id=? AND companyId=?",
+    args: [materialCost, articleId, companyId],
+  });
 }

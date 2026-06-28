@@ -14,6 +14,19 @@ export type Company = {
   targetProfitPct: number; // lucro-alvo usado na página de custos
 };
 
+export type Supplier = { id: number; companyId: number; name: string };
+
+export type PriceEntry = {
+  id: number;
+  companyId: number;
+  articleId: number;
+  supplierId: number | null;
+  supplierName: string;
+  price: number;
+  date: string; // YYYY-MM-DD
+  createdAt: string;
+};
+
 export type UserRole = "owner" | "member";
 
 export type User = {

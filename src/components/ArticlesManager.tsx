@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import type { Article } from "@/lib/types";
 import { eur } from "@/lib/calc";
@@ -131,6 +132,12 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <h1 className="text-2xl font-bold flex-1">Base de artigos</h1>
+        <Link
+          href="/artigos/cotacao"
+          className="border border-slate-300 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          ↥ Importar cotação
+        </Link>
         <button
           onClick={() => setCreating(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
@@ -176,7 +183,11 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
           <tbody>
             {filtered.map((a) => (
               <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-3 py-2">{a.name}</td>
+                <td className="px-3 py-2">
+                  <Link href={`/artigos/${a.id}`} className="text-blue-700 hover:underline">
+                    {a.name}
+                  </Link>
+                </td>
                 <td className="px-2 py-2 text-slate-500">{a.category}</td>
                 <td className="px-2 py-2 text-center text-slate-500">{a.unit}</td>
                 <td className="px-2 py-2 text-right">{eur(a.materialCost)}</td>
