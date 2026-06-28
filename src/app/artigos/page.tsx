@@ -3,7 +3,7 @@ import ArticlesManager from "@/components/ArticlesManager";
 
 export const dynamic = "force-dynamic";
 
-export default function ArticlesPage() {
-  const articles = listArticles();
+export default async function ArticlesPage() {
+  const articles = await listArticles();
   return <ArticlesManager articles={articles} />;
 }

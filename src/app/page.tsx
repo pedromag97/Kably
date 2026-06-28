@@ -5,8 +5,11 @@ import { deleteBudgetAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const budgets = listBudgets();
+export default async function HomePage() {
+  const budgets = await listBudgets();
+  const withTotals = await Promise.all(
+    budgets.map(async (b) => ({ b, totals: budgetTotals((await getBudget(b.id))!) }))
+  );
 
   return (
     <div>
@@ -38,9 +41,7 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="grid gap-3">
-          {budgets.map((b) => {
-            const full = getBudget(b.id)!;
-            const t = budgetTotals(full);
+          {withTotals.map(({ b, totals: t }) => {
             return (
               <div
                 key={b.id}

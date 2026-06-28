@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { createClient as createWebClient } from "@libsql/client/web";
 import fs from "node:fs";
 import path from "node:path";
 import { SEED_ARTICLES, DEFAULT_CONDITIONS } from "./seed-data";
@@ -114,235 +115,328 @@ CREATE TABLE IF NOT EXISTS budget_items (
 );
 `;
 
-// Colunas acrescentadas após a primeira versão — CREATE TABLE IF NOT EXISTS
-// não altera tabelas existentes, por isso adicionam-se aqui se faltarem.
-function migrate(conn: DatabaseSync) {
-  const addColumn = (table: string, column: string, ddl: string) => {
-    const cols = conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some((c) => c.name === column)) {
-      conn.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+// ── Ligação ───────────────────────────────────────────────────────────
+// Local (qualquer SO, incl. Windows ARM64): node:sqlite sobre ficheiro.
+// Produção (Turso): cliente web libSQL puro-JS via HTTP (sem binários nativos).
+// As duas implementações expõem a mesma forma (execute/batch/executeMultiple),
+// por isso passar à cloud é só definir DATABASE_URL=libsql://… + DATABASE_AUTH_TOKEN.
+
+type SqlArg = string | number | bigint | null;
+type Stmt = string | { sql: string; args?: SqlArg[] };
+type Res = {
+  rows: Record<string, unknown>[];
+  columns: string[];
+  lastInsertRowid?: number | bigint;
+  rowsAffected: number;
+};
+interface DbClient {
+  execute(stmt: Stmt): Promise<Res>;
+  batch(stmts: Stmt[], mode?: "write" | "read"): Promise<Res[]>;
+  executeMultiple(sql: string): Promise<void>;
+}
+
+/** Adaptador node:sqlite com a forma da API libSQL (para desenvolvimento local). */
+function makeLocalClient(file: string): DbClient {
+  const sdb = new DatabaseSync(file);
+  sdb.exec("PRAGMA foreign_keys = ON");
+  sdb.exec("PRAGMA journal_mode = WAL");
+  const norm = (s: Stmt) =>
+    typeof s === "string" ? { sql: s, args: [] as SqlArg[] } : { sql: s.sql, args: s.args ?? [] };
+  const isRead = (sql: string) => /^\s*(SELECT|PRAGMA|WITH)/i.test(sql);
+  const run1 = ({ sql, args }: { sql: string; args: SqlArg[] }): Res => {
+    const stmt = sdb.prepare(sql);
+    if (isRead(sql)) {
+      const raw = stmt.all(...args) as Record<string, unknown>[];
+      const rows = raw.map((r) => ({ ...r }));
+      return { rows, columns: rows.length ? Object.keys(rows[0]) : [], rowsAffected: 0 };
     }
+    const info = stmt.run(...args);
+    return {
+      rows: [],
+      columns: [],
+      lastInsertRowid: info.lastInsertRowid as number | bigint,
+      rowsAffected: Number(info.changes),
+    };
   };
-  addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
-  addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
-  addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
-  addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
+  return {
+    async execute(s) {
+      return run1(norm(s));
+    },
+    async batch(stmts) {
+      sdb.exec("BEGIN");
+      try {
+        const out = stmts.map((s) => run1(norm(s)));
+        sdb.exec("COMMIT");
+        return out;
+      } catch (e) {
+        sdb.exec("ROLLBACK");
+        throw e;
+      }
+    },
+    async executeMultiple(sql) {
+      sdb.exec(sql);
+    },
+  };
 }
 
 declare global {
   // eslint-disable-next-line no-var
-  var __kablyDb: DatabaseSync | undefined;
+  var __kablyClient: DbClient | undefined;
+  // eslint-disable-next-line no-var
+  var __kablyReady: Promise<DbClient> | undefined;
 }
 
-export function db(): DatabaseSync {
-  if (globalThis.__kablyDb) return globalThis.__kablyDb;
-  const dir = path.join(process.cwd(), "data");
-  fs.mkdirSync(dir, { recursive: true });
-  const conn = new DatabaseSync(path.join(dir, "kably.db"));
-  conn.exec("PRAGMA foreign_keys = ON");
-  conn.exec("PRAGMA journal_mode = WAL");
-  conn.exec(SCHEMA);
-  migrate(conn);
-  seed(conn);
-  globalThis.__kablyDb = conn;
-  return conn;
+function rawClient(): DbClient {
+  if (globalThis.__kablyClient) return globalThis.__kablyClient;
+  const url = process.env.DATABASE_URL ?? "file:data/kably.db";
+  const authToken = process.env.DATABASE_AUTH_TOKEN;
+  if (url.startsWith("file:")) {
+    const file = url.slice("file:".length);
+    const dir = path.dirname(file);
+    if (dir && dir !== ".") fs.mkdirSync(dir, { recursive: true });
+    globalThis.__kablyClient = makeLocalClient(file);
+  } else {
+    globalThis.__kablyClient = createWebClient(
+      authToken ? { url, authToken } : { url }
+    ) as unknown as DbClient;
+  }
+  return globalThis.__kablyClient;
 }
 
-function seed(conn: DatabaseSync) {
-  const row = conn.prepare("SELECT COUNT(*) AS n FROM companies").get() as { n: number };
-  if (row.n > 0) return;
-  const r = conn
-    .prepare(
-      "INSERT INTO companies (name, nif, email, phone, address, conditions) VALUES (?,?,?,?,?,?)"
-    )
-    .run(
+/** Devolve o cliente, garantindo schema + migração + seed uma única vez. */
+async function db(): Promise<DbClient> {
+  if (!globalThis.__kablyReady) {
+    globalThis.__kablyReady = (async () => {
+      const c = rawClient();
+      await c.executeMultiple(SCHEMA);
+      await migrate(c);
+      await seed(c);
+      return c;
+    })();
+  }
+  return globalThis.__kablyReady;
+}
+
+// Colunas acrescentadas após a primeira versão — CREATE TABLE IF NOT EXISTS
+// não altera tabelas existentes, por isso adicionam-se aqui se faltarem.
+async function migrate(c: DbClient) {
+  const addColumn = async (table: string, column: string, ddl: string) => {
+    const info = await c.execute(`PRAGMA table_info(${table})`);
+    const has = info.rows.some((r) => (r as Record<string, unknown>).name === column);
+    if (!has) await c.execute(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  };
+  await addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
+  await addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
+  await addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
+  await addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
+}
+
+async function seed(c: DbClient) {
+  const r = await c.execute("SELECT COUNT(*) AS n FROM companies");
+  if (Number((r.rows[0] as Record<string, unknown>).n) > 0) return;
+  const ins = await c.execute({
+    sql: "INSERT INTO companies (name, nif, email, phone, address, conditions) VALUES (?,?,?,?,?,?)",
+    args: [
       "A Minha Empresa, Lda.",
       "500000000",
       "geral@empresa.pt",
       "910 000 000",
       "Rua Exemplo 1, 0000-000 Lisboa",
-      DEFAULT_CONDITIONS
-    );
-  const companyId = Number(r.lastInsertRowid);
-  const ins = conn.prepare(
-    "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours) VALUES (?,?,?,?,?,?,?)"
+      DEFAULT_CONDITIONS,
+    ],
+  });
+  const companyId = Number(ins.lastInsertRowid);
+  await c.batch(
+    SEED_ARTICLES.map(([code, name, category, unit, materialCost, laborHours]) => ({
+      sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours) VALUES (?,?,?,?,?,?,?)",
+      args: [companyId, code, name, category, unit, materialCost, laborHours],
+    })),
+    "write"
   );
-  for (const [code, name, category, unit, materialCost, laborHours] of SEED_ARTICLES) {
-    ins.run(companyId, code, name, category, unit, materialCost, laborHours);
-  }
 }
 
-// node:sqlite devolve linhas com protótipo nulo; o React Server Components
-// só serializa objetos simples — normalizar antes de devolver.
-function plain<T>(row: unknown): T {
-  return { ...(row as object) } as T;
+// ── Mapeamento de linhas → objetos simples ────────────────────────────
+// (o React Server Components só serializa objetos simples)
+
+function rowsToObjects<T>(rs: Res): T[] {
+  // No modo local as linhas já são objetos; no modo web mapeamos por coluna.
+  if (rs.columns.length === 0) return rs.rows as T[];
+  return rs.rows.map((row) => {
+    const o: Record<string, unknown> = {};
+    for (const col of rs.columns) o[col] = row[col];
+    return o as T;
+  });
 }
 
-function plainAll<T>(rows: unknown[]): T[] {
-  return rows.map((r) => plain<T>(r));
+function firstRow<T>(rs: Res): T | undefined {
+  return rowsToObjects<T>(rs)[0];
 }
 
 // ── Empresa ───────────────────────────────────────────────────────────
 
-export function getCompany(): Company {
-  return plain<Company>(db().prepare("SELECT * FROM companies ORDER BY id LIMIT 1").get());
+export async function getCompany(): Promise<Company> {
+  const c = await db();
+  const rs = await c.execute("SELECT * FROM companies ORDER BY id LIMIT 1");
+  return firstRow<Company>(rs)!;
 }
 
-export function saveCompany(data: Omit<Company, "id" | "targetProfitPct">): void {
-  const c = getCompany();
-  db()
-    .prepare(
-      `UPDATE companies SET name=?, nif=?, email=?, phone=?, address=?, logo=?,
-       materialMargin=?, laborMargin=?, laborRate=?, validityDays=?, conditions=? WHERE id=?`
-    )
-    .run(
-      data.name,
-      data.nif,
-      data.email,
-      data.phone,
-      data.address,
-      data.logo,
-      data.materialMargin,
-      data.laborMargin,
-      data.laborRate,
-      data.validityDays,
-      data.conditions,
-      c.id
-    );
+export async function saveCompany(
+  data: Omit<Company, "id" | "targetProfitPct">
+): Promise<void> {
+  const c = await db();
+  const company = await getCompany();
+  await c.execute({
+    sql: `UPDATE companies SET name=?, nif=?, email=?, phone=?, address=?, logo=?,
+       materialMargin=?, laborMargin=?, laborRate=?, validityDays=?, conditions=? WHERE id=?`,
+    args: [
+      data.name, data.nif, data.email, data.phone, data.address, data.logo,
+      data.materialMargin, data.laborMargin, data.laborRate, data.validityDays,
+      data.conditions, company.id,
+    ],
+  });
 }
 
 // ── Artigos ───────────────────────────────────────────────────────────
 
-export function listArticles(): Article[] {
-  return plainAll<Article>(
-    db().prepare("SELECT * FROM articles ORDER BY category, name").all()
+export async function listArticles(): Promise<Article[]> {
+  const c = await db();
+  return rowsToObjects<Article>(
+    await c.execute("SELECT * FROM articles ORDER BY category, name")
   );
 }
 
-export function getArticle(id: number): Article | undefined {
-  const row = db().prepare("SELECT * FROM articles WHERE id=?").get(id);
-  return row ? plain<Article>(row) : undefined;
+export async function getArticle(id: number): Promise<Article | undefined> {
+  const c = await db();
+  return firstRow<Article>(
+    await c.execute({ sql: "SELECT * FROM articles WHERE id=?", args: [id] })
+  );
 }
 
-export function createArticle(a: Omit<Article, "id" | "companyId">): number {
-  const c = getCompany();
-  const r = db()
-    .prepare(
-      "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours, notes) VALUES (?,?,?,?,?,?,?,?)"
-    )
-    .run(c.id, a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes);
+export async function createArticle(a: Omit<Article, "id" | "companyId">): Promise<number> {
+  const c = await db();
+  const company = await getCompany();
+  const r = await c.execute({
+    sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours, notes) VALUES (?,?,?,?,?,?,?,?)",
+    args: [company.id, a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes],
+  });
   return Number(r.lastInsertRowid);
 }
 
-export function updateArticle(id: number, a: Omit<Article, "id" | "companyId">): void {
-  db()
-    .prepare(
-      "UPDATE articles SET code=?, name=?, category=?, unit=?, materialCost=?, laborHours=?, notes=? WHERE id=?"
-    )
-    .run(a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes, id);
+export async function updateArticle(
+  id: number,
+  a: Omit<Article, "id" | "companyId">
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE articles SET code=?, name=?, category=?, unit=?, materialCost=?, laborHours=?, notes=? WHERE id=?",
+    args: [a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes, id],
+  });
 }
 
-export function deleteArticle(id: number): void {
-  db().prepare("DELETE FROM articles WHERE id=?").run(id);
+export async function deleteArticle(id: number): Promise<void> {
+  const c = await db();
+  // cascata explícita (idêntico em local e Turso, sem depender de PRAGMA)
+  await c.batch(
+    [
+      { sql: "UPDATE budget_items SET articleId=NULL WHERE articleId=?", args: [id] },
+      { sql: "DELETE FROM mqt_aliases WHERE articleId=?", args: [id] },
+      { sql: "DELETE FROM articles WHERE id=?", args: [id] },
+    ],
+    "write"
+  );
 }
 
 // ── Custos da empresa (trabalhadores + despesas) ──────────────────────
 
-export function listWorkers(): Worker[] {
-  return plainAll<Worker>(
-    db().prepare("SELECT * FROM workers ORDER BY position, id").all()
+export async function listWorkers(): Promise<Worker[]> {
+  const c = await db();
+  return rowsToObjects<Worker>(
+    await c.execute("SELECT * FROM workers ORDER BY position, id")
   );
 }
 
-export function listExpenses(): Expense[] {
-  return plainAll<Expense>(
-    db().prepare("SELECT * FROM expenses ORDER BY category, position, id").all()
+export async function listExpenses(): Promise<Expense[]> {
+  const c = await db();
+  return rowsToObjects<Expense>(
+    await c.execute("SELECT * FROM expenses ORDER BY category, position, id")
   );
 }
 
-/** Substitui todos os trabalhadores e despesas (estratégia replace-all —
- *  a página guarda o estado completo de uma vez). */
-export function saveCosts(
+/** Substitui todos os trabalhadores e despesas (replace-all atómico). */
+export async function saveCosts(
   workers: Omit<Worker, "id" | "companyId">[],
   expenses: Omit<Expense, "id" | "companyId">[],
   targetProfitPct: number
-): void {
-  const c = getCompany();
-  const conn = db();
-  conn.exec("BEGIN");
-  try {
-    conn.prepare("DELETE FROM workers WHERE companyId=?").run(c.id);
-    conn.prepare("DELETE FROM expenses WHERE companyId=?").run(c.id);
-    const insW = conn.prepare(
-      `INSERT INTO workers (companyId, name, role, productive, grossSalary, months,
+): Promise<void> {
+  const c = await db();
+  const company = await getCompany();
+  const stmts = [
+    { sql: "DELETE FROM workers WHERE companyId=?", args: [company.id] },
+    { sql: "DELETE FROM expenses WHERE companyId=?", args: [company.id] },
+    ...workers.map((w, i) => ({
+      sql: `INSERT INTO workers (companyId, name, role, productive, grossSalary, months,
        tsuPct, insurancePct, mealAllowance, manualAnnualCost, workDays, hoursPerDay,
-       productivityPct, position) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    );
-    workers.forEach((w, i) =>
-      insW.run(
-        c.id, w.name, w.role, w.productive, w.grossSalary, w.months, w.tsuPct,
-        w.insurancePct, w.mealAllowance, w.manualAnnualCost, w.workDays,
-        w.hoursPerDay, w.productivityPct, i
-      )
-    );
-    const insE = conn.prepare(
-      "INSERT INTO expenses (companyId, category, name, amount, period, years, position) VALUES (?,?,?,?,?,?,?)"
-    );
-    expenses.forEach((e, i) =>
-      insE.run(c.id, e.category, e.name, e.amount, e.period, e.years, i)
-    );
-    conn.prepare("UPDATE companies SET targetProfitPct=? WHERE id=?").run(
-      targetProfitPct,
-      c.id
-    );
-    conn.exec("COMMIT");
-  } catch (err) {
-    conn.exec("ROLLBACK");
-    throw err;
-  }
+       productivityPct, position) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [
+        company.id, w.name, w.role, w.productive, w.grossSalary, w.months, w.tsuPct,
+        w.insurancePct, w.mealAllowance, w.manualAnnualCost, w.workDays, w.hoursPerDay,
+        w.productivityPct, i,
+      ],
+    })),
+    ...expenses.map((e, i) => ({
+      sql: "INSERT INTO expenses (companyId, category, name, amount, period, years, position) VALUES (?,?,?,?,?,?,?)",
+      args: [company.id, e.category, e.name, e.amount, e.period, e.years, i],
+    })),
+    { sql: "UPDATE companies SET targetProfitPct=? WHERE id=?", args: [targetProfitPct, company.id] },
+  ];
+  await c.batch(stmts, "write");
 }
 
 // ── Associações MQT memorizadas ───────────────────────────────────────
 
-export function listAliases(): { normText: string; articleId: number }[] {
-  return plainAll<{ normText: string; articleId: number }>(
-    db().prepare("SELECT normText, articleId FROM mqt_aliases").all()
+export async function listAliases(): Promise<{ normText: string; articleId: number }[]> {
+  const c = await db();
+  return rowsToObjects<{ normText: string; articleId: number }>(
+    await c.execute("SELECT normText, articleId FROM mqt_aliases")
   );
 }
 
-export function saveAlias(normText: string, articleId: number): void {
-  const c = getCompany();
-  db()
-    .prepare(
-      `INSERT INTO mqt_aliases (companyId, normText, articleId) VALUES (?,?,?)
-       ON CONFLICT(companyId, normText) DO UPDATE SET articleId=excluded.articleId`
-    )
-    .run(c.id, normText, articleId);
+export async function saveAlias(normText: string, articleId: number): Promise<void> {
+  const c = await db();
+  const company = await getCompany();
+  await c.execute({
+    sql: `INSERT INTO mqt_aliases (companyId, normText, articleId) VALUES (?,?,?)
+       ON CONFLICT(companyId, normText) DO UPDATE SET articleId=excluded.articleId`,
+    args: [company.id, normText, articleId],
+  });
 }
 
 // ── Orçamentos ────────────────────────────────────────────────────────
 
-export function listBudgets(): Budget[] {
-  return plainAll<Budget>(db().prepare("SELECT * FROM budgets ORDER BY id DESC").all());
+export async function listBudgets(): Promise<Budget[]> {
+  const c = await db();
+  return rowsToObjects<Budget>(await c.execute("SELECT * FROM budgets ORDER BY id DESC"));
 }
 
-export function getBudget(id: number): BudgetFull | undefined {
-  const row = db().prepare("SELECT * FROM budgets WHERE id=?").get(id);
-  if (!row) return undefined;
-  const budget = plain<Budget>(row);
-  const chapters = plainAll<BudgetChapter>(
-    db()
-      .prepare("SELECT * FROM budget_chapters WHERE budgetId=? ORDER BY position, id")
-      .all(id)
+export async function getBudget(id: number): Promise<BudgetFull | undefined> {
+  const c = await db();
+  const budget = firstRow<Budget>(
+    await c.execute({ sql: "SELECT * FROM budgets WHERE id=?", args: [id] })
   );
-  const itemsByChapter = plainAll<BudgetItem>(
-    db()
-      .prepare(
-        `SELECT bi.* FROM budget_items bi
+  if (!budget) return undefined;
+  const chapters = rowsToObjects<BudgetChapter>(
+    await c.execute({
+      sql: "SELECT * FROM budget_chapters WHERE budgetId=? ORDER BY position, id",
+      args: [id],
+    })
+  );
+  const itemsByChapter = rowsToObjects<BudgetItem>(
+    await c.execute({
+      sql: `SELECT bi.* FROM budget_items bi
        JOIN budget_chapters bc ON bc.id = bi.chapterId
-       WHERE bc.budgetId=? ORDER BY bi.position, bi.id`
-      )
-      .all(id)
+       WHERE bc.budgetId=? ORDER BY bi.position, bi.id`,
+      args: [id],
+    })
   );
   return {
     ...budget,
@@ -353,156 +447,167 @@ export function getBudget(id: number): BudgetFull | undefined {
   };
 }
 
-export function nextBudgetNumber(): string {
+export async function nextBudgetNumber(): Promise<string> {
+  const c = await db();
   const year = new Date().getFullYear();
   const prefix = `ORC-${year}-`;
-  const row = db()
-    .prepare("SELECT COUNT(*) AS n FROM budgets WHERE number LIKE ?")
-    .get(`${prefix}%`) as { n: number };
-  return `${prefix}${String(row.n + 1).padStart(3, "0")}`;
+  const rs = await c.execute({
+    sql: "SELECT COUNT(*) AS n FROM budgets WHERE number LIKE ?",
+    args: [`${prefix}%`],
+  });
+  const n = Number((rs.rows[0] as Record<string, unknown>).n);
+  return `${prefix}${String(n + 1).padStart(3, "0")}`;
 }
 
-export function createBudget(
+export async function createBudget(
   data: Pick<
     Budget,
-    | "title"
-    | "clientName"
-    | "clientNif"
-    | "clientEmail"
-    | "clientPhone"
-    | "siteAddress"
-    | "vatMode"
+    | "title" | "clientName" | "clientNif" | "clientEmail" | "clientPhone"
+    | "siteAddress" | "vatMode"
   >,
   chapterNames: string[]
-): number {
-  const c = getCompany();
-  const r = db()
-    .prepare(
-      `INSERT INTO budgets (companyId, number, title, clientName, clientNif, clientEmail,
+): Promise<number> {
+  const c = await db();
+  const company = await getCompany();
+  const number = await nextBudgetNumber();
+  const r = await c.execute({
+    sql: `INSERT INTO budgets (companyId, number, title, clientName, clientNif, clientEmail,
        clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate, validityDays)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
-      c.id,
-      nextBudgetNumber(),
-      data.title,
-      data.clientName,
-      data.clientNif,
-      data.clientEmail,
-      data.clientPhone,
-      data.siteAddress,
-      data.vatMode,
-      c.materialMargin,
-      c.laborMargin,
-      c.laborRate,
-      c.validityDays
-    );
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      company.id, number, data.title, data.clientName, data.clientNif, data.clientEmail,
+      data.clientPhone, data.siteAddress, data.vatMode, company.materialMargin,
+      company.laborMargin, company.laborRate, company.validityDays,
+    ],
+  });
   const budgetId = Number(r.lastInsertRowid);
-  const ins = db().prepare(
-    "INSERT INTO budget_chapters (budgetId, name, position) VALUES (?,?,?)"
-  );
-  chapterNames.forEach((name, i) => ins.run(budgetId, name, i));
+  if (chapterNames.length > 0) {
+    await c.batch(
+      chapterNames.map((name, i) => ({
+        sql: "INSERT INTO budget_chapters (budgetId, name, position) VALUES (?,?,?)",
+        args: [budgetId, name, i],
+      })),
+      "write"
+    );
+  }
   return budgetId;
 }
 
-export function updateBudget(id: number, fields: Partial<Budget>): void {
+export async function updateBudget(id: number, fields: Partial<Budget>): Promise<void> {
+  const c = await db();
   const allowed = [
-    "title",
-    "clientName",
-    "clientNif",
-    "clientEmail",
-    "clientPhone",
-    "siteAddress",
-    "vatMode",
-    "materialMargin",
-    "laborMargin",
-    "laborRate",
-    "validityDays",
-    "laborOnly",
-    "materialFeePct",
-    "notes",
+    "title", "clientName", "clientNif", "clientEmail", "clientPhone", "siteAddress",
+    "vatMode", "materialMargin", "laborMargin", "laborRate", "validityDays",
+    "laborOnly", "materialFeePct", "notes",
   ] as const;
   const keys = allowed.filter((k) => fields[k] !== undefined);
   if (keys.length === 0) return;
   const sets = keys.map((k) => `${k}=?`).join(", ");
   const values = keys.map((k) => fields[k] as string | number);
-  db()
-    .prepare(`UPDATE budgets SET ${sets}, updatedAt=datetime('now') WHERE id=?`)
-    .run(...values, id);
+  await c.execute({
+    sql: `UPDATE budgets SET ${sets}, updatedAt=datetime('now') WHERE id=?`,
+    args: [...values, id],
+  });
 }
 
-export function deleteBudget(id: number): void {
-  db().prepare("DELETE FROM budgets WHERE id=?").run(id);
+export async function deleteBudget(id: number): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      {
+        sql: `DELETE FROM budget_items WHERE chapterId IN
+              (SELECT id FROM budget_chapters WHERE budgetId=?)`,
+        args: [id],
+      },
+      { sql: "DELETE FROM budget_chapters WHERE budgetId=?", args: [id] },
+      { sql: "DELETE FROM budgets WHERE id=?", args: [id] },
+    ],
+    "write"
+  );
 }
 
-function touchBudget(budgetId: number): void {
-  db().prepare("UPDATE budgets SET updatedAt=datetime('now') WHERE id=?").run(budgetId);
+async function touchBudget(c: DbClient, budgetId: number): Promise<void> {
+  await c.execute({
+    sql: "UPDATE budgets SET updatedAt=datetime('now') WHERE id=?",
+    args: [budgetId],
+  });
 }
 
 // ── Capítulos ─────────────────────────────────────────────────────────
 
-export function addChapter(budgetId: number, name: string): number {
-  const row = db()
-    .prepare("SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_chapters WHERE budgetId=?")
-    .get(budgetId) as { p: number };
-  const r = db()
-    .prepare("INSERT INTO budget_chapters (budgetId, name, position) VALUES (?,?,?)")
-    .run(budgetId, name, row.p);
-  touchBudget(budgetId);
+export async function addChapter(budgetId: number, name: string): Promise<number> {
+  const c = await db();
+  const pr = await c.execute({
+    sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_chapters WHERE budgetId=?",
+    args: [budgetId],
+  });
+  const p = Number((pr.rows[0] as Record<string, unknown>).p);
+  const r = await c.execute({
+    sql: "INSERT INTO budget_chapters (budgetId, name, position) VALUES (?,?,?)",
+    args: [budgetId, name, p],
+  });
+  await touchBudget(c, budgetId);
   return Number(r.lastInsertRowid);
 }
 
-export function renameChapter(id: number, name: string): void {
-  db().prepare("UPDATE budget_chapters SET name=? WHERE id=?").run(name, id);
+export async function renameChapter(id: number, name: string): Promise<void> {
+  const c = await db();
+  await c.execute({ sql: "UPDATE budget_chapters SET name=? WHERE id=?", args: [name, id] });
 }
 
-export function deleteChapter(id: number): void {
-  db().prepare("DELETE FROM budget_chapters WHERE id=?").run(id);
+export async function deleteChapter(id: number): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      { sql: "DELETE FROM budget_items WHERE chapterId=?", args: [id] },
+      { sql: "DELETE FROM budget_chapters WHERE id=?", args: [id] },
+    ],
+    "write"
+  );
 }
 
 // ── Itens ─────────────────────────────────────────────────────────────
 
-export function addItem(
+export async function addItem(
   chapterId: number,
   item: Pick<BudgetItem, "articleId" | "name" | "unit" | "quantity" | "materialCost" | "laborHours">
-): number {
-  const row = db()
-    .prepare("SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_items WHERE chapterId=?")
-    .get(chapterId) as { p: number };
-  const r = db()
-    .prepare(
-      "INSERT INTO budget_items (chapterId, articleId, name, unit, quantity, materialCost, laborHours, position) VALUES (?,?,?,?,?,?,?,?)"
-    )
-    .run(
-      chapterId,
-      item.articleId,
-      item.name,
-      item.unit,
-      item.quantity,
-      item.materialCost,
-      item.laborHours,
-      row.p
-    );
+): Promise<number> {
+  const c = await db();
+  const pr = await c.execute({
+    sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_items WHERE chapterId=?",
+    args: [chapterId],
+  });
+  const p = Number((pr.rows[0] as Record<string, unknown>).p);
+  const r = await c.execute({
+    sql: "INSERT INTO budget_items (chapterId, articleId, name, unit, quantity, materialCost, laborHours, position) VALUES (?,?,?,?,?,?,?,?)",
+    args: [
+      chapterId, item.articleId, item.name, item.unit, item.quantity,
+      item.materialCost, item.laborHours, p,
+    ],
+  });
   return Number(r.lastInsertRowid);
 }
 
-export function updateItem(
+export async function updateItem(
   id: number,
   item: Pick<BudgetItem, "name" | "unit" | "quantity" | "materialCost" | "laborHours">
-): void {
-  db()
-    .prepare(
-      "UPDATE budget_items SET name=?, unit=?, quantity=?, materialCost=?, laborHours=? WHERE id=?"
-    )
-    .run(item.name, item.unit, item.quantity, item.materialCost, item.laborHours, id);
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE budget_items SET name=?, unit=?, quantity=?, materialCost=?, laborHours=? WHERE id=?",
+    args: [item.name, item.unit, item.quantity, item.materialCost, item.laborHours, id],
+  });
 }
 
-export function setItemMaterialIncluded(id: number, included: boolean): void {
-  db()
-    .prepare("UPDATE budget_items SET materialIncluded=? WHERE id=?")
-    .run(included ? 1 : 0, id);
+export async function setItemMaterialIncluded(id: number, included: boolean): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE budget_items SET materialIncluded=? WHERE id=?",
+    args: [included ? 1 : 0, id],
+  });
 }
 
-export function deleteItem(id: number): void {
-  db().prepare("DELETE FROM budget_items WHERE id=?").run(id);
+export async function deleteItem(id: number): Promise<void> {
+  const c = await db();
+  await c.execute({ sql: "DELETE FROM budget_items WHERE id=?", args: [id] });
 }

@@ -3,9 +3,11 @@ import CompanyCosts from "@/components/CompanyCosts";
 
 export const dynamic = "force-dynamic";
 
-export default function CostsPage() {
-  const company = getCompany();
-  const workers = listWorkers();
-  const expenses = listExpenses();
+export default async function CostsPage() {
+  const [company, workers, expenses] = await Promise.all([
+    getCompany(),
+    listWorkers(),
+    listExpenses(),
+  ]);
   return <CompanyCosts company={company} savedWorkers={workers} savedExpenses={expenses} />;
 }

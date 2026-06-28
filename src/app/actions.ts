@@ -18,7 +18,7 @@ function flt(fd: FormData, key: string, fallback = 0): number {
 // ── Orçamentos ────────────────────────────────────────────────────────
 
 export async function createBudgetAction(fd: FormData) {
-  const id = store.createBudget(
+  const id = await store.createBudget(
     {
       title: str(fd, "title") || "Instalação elétrica",
       clientName: str(fd, "clientName"),
@@ -35,7 +35,7 @@ export async function createBudgetAction(fd: FormData) {
 }
 
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
-  store.updateBudget(budgetId, {
+  await store.updateBudget(budgetId, {
     title: str(fd, "title"),
     clientName: str(fd, "clientName"),
     clientNif: str(fd, "clientNif"),
@@ -55,24 +55,24 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
 }
 
 export async function deleteBudgetAction(budgetId: number) {
-  store.deleteBudget(budgetId);
+  await store.deleteBudget(budgetId);
   revalidatePath("/");
 }
 
 // ── Capítulos ─────────────────────────────────────────────────────────
 
 export async function addChapterAction(budgetId: number, name: string) {
-  store.addChapter(budgetId, name.trim() || "Novo capítulo");
+  await store.addChapter(budgetId, name.trim() || "Novo capítulo");
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function renameChapterAction(budgetId: number, chapterId: number, name: string) {
-  store.renameChapter(chapterId, name.trim() || "Capítulo");
+  await store.renameChapter(chapterId, name.trim() || "Capítulo");
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function deleteChapterAction(budgetId: number, chapterId: number) {
-  store.deleteChapter(chapterId);
+  await store.deleteChapter(chapterId);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -84,9 +84,9 @@ export async function addItemFromArticleAction(
   articleId: number,
   quantity: number
 ) {
-  const a = store.getArticle(articleId);
+  const a = await store.getArticle(articleId);
   if (!a) return;
-  store.addItem(chapterId, {
+  await store.addItem(chapterId, {
     articleId: a.id,
     name: a.name,
     unit: a.unit,
@@ -98,7 +98,7 @@ export async function addItemFromArticleAction(
 }
 
 export async function addBlankItemAction(budgetId: number, chapterId: number) {
-  store.addItem(chapterId, {
+  await store.addItem(chapterId, {
     articleId: null,
     name: "",
     unit: "un",
@@ -114,12 +114,12 @@ export async function updateItemAction(
   itemId: number,
   item: { name: string; unit: string; quantity: number; materialCost: number; laborHours: number }
 ) {
-  store.updateItem(itemId, item);
+  await store.updateItem(itemId, item);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function deleteItemAction(budgetId: number, itemId: number) {
-  store.deleteItem(itemId);
+  await store.deleteItem(itemId);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -128,7 +128,7 @@ export async function setItemMaterialIncludedAction(
   itemId: number,
   included: boolean
 ) {
-  store.setItemMaterialIncluded(itemId, included);
+  await store.setItemMaterialIncluded(itemId, included);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -156,7 +156,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
   const { CATEGORY_TO_CHAPTER, FALLBACK_CHAPTER, CHAPTER_ORDER, normalizeText } =
     await import("@/lib/matching");
 
-  const budgetId = store.createBudget(
+  const budgetId = await store.createBudget(
     {
       title: meta.title.trim() || "Orçamento importado de MQT",
       clientName: meta.clientName.trim(),
@@ -169,7 +169,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     [] // capítulos criados abaixo, só os que têm itens
   );
   if (meta.laborOnly) {
-    store.updateBudget(budgetId, { laborOnly: 1 });
+    await store.updateBudget(budgetId, { laborOnly: 1 });
   }
 
   // Resolver cada linha num item + capítulo de destino
@@ -190,9 +190,9 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     const quantity = line.quantity > 0 ? line.quantity : 1;
 
     if (line.choice.kind === "article") {
-      const a = store.getArticle(line.choice.articleId);
+      const a = await store.getArticle(line.choice.articleId);
       if (!a) continue;
-      store.saveAlias(normalizeText(line.mqtText), a.id); // memorizar para o próximo MQT
+      await store.saveAlias(normalizeText(line.mqtText), a.id); // memorizar para o próximo MQT
       resolved.push({
         chapter: CATEGORY_TO_CHAPTER[a.category] ?? FALLBACK_CHAPTER,
         item: {
@@ -205,7 +205,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         },
       });
     } else if (line.choice.kind === "new") {
-      const articleId = store.createArticle({
+      const articleId = await store.createArticle({
         code: "MQT",
         name: line.mqtText.slice(0, 200),
         category: "Diversos",
@@ -214,7 +214,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         laborHours: 0,
         notes: "Criado por importação de MQT — preencher custos",
       });
-      store.saveAlias(normalizeText(line.mqtText), articleId);
+      await store.saveAlias(normalizeText(line.mqtText), articleId);
       resolved.push({
         chapter: FALLBACK_CHAPTER,
         item: {
@@ -247,9 +247,9 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     resolved.some((r) => r.chapter === ch)
   );
   for (const chName of chapters) {
-    const chapterId = store.addChapter(budgetId, chName);
+    const chapterId = await store.addChapter(budgetId, chName);
     for (const r of resolved.filter((x) => x.chapter === chName)) {
-      store.addItem(chapterId, r.item);
+      await store.addItem(chapterId, r.item);
     }
   }
 
@@ -260,7 +260,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
 // ── Artigos ───────────────────────────────────────────────────────────
 
 export async function createArticleAction(fd: FormData) {
-  store.createArticle({
+  await store.createArticle({
     code: str(fd, "code"),
     name: str(fd, "name") || "Novo artigo",
     category: str(fd, "category") || "Diversos",
@@ -273,7 +273,7 @@ export async function createArticleAction(fd: FormData) {
 }
 
 export async function updateArticleAction(articleId: number, fd: FormData) {
-  store.updateArticle(articleId, {
+  await store.updateArticle(articleId, {
     code: str(fd, "code"),
     name: str(fd, "name") || "Artigo",
     category: str(fd, "category") || "Diversos",
@@ -286,7 +286,7 @@ export async function updateArticleAction(articleId: number, fd: FormData) {
 }
 
 export async function deleteArticleAction(articleId: number) {
-  store.deleteArticle(articleId);
+  await store.deleteArticle(articleId);
   revalidatePath("/artigos");
 }
 
@@ -299,7 +299,7 @@ export type CostsPayload = {
 };
 
 export async function saveCostsAction(payload: CostsPayload) {
-  store.saveCosts(
+  await store.saveCosts(
     payload.workers.map((w, i) => ({ ...w, position: i })),
     payload.expenses.map((e, i) => ({ ...e, position: i })),
     payload.targetProfitPct
@@ -310,7 +310,7 @@ export async function saveCostsAction(payload: CostsPayload) {
 // ── Empresa ───────────────────────────────────────────────────────────
 
 export async function saveCompanyAction(fd: FormData) {
-  store.saveCompany({
+  await store.saveCompany({
     name: str(fd, "name") || "A Minha Empresa",
     nif: str(fd, "nif"),
     email: str(fd, "email"),

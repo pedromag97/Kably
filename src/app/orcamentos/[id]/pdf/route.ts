@@ -10,10 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const budget = getBudget(Number(id));
+  const budget = await getBudget(Number(id));
   if (!budget) return new Response("Orçamento não encontrado", { status: 404 });
 
-  const company = getCompany();
+  const company = await getCompany();
   const internal = req.nextUrl.searchParams.get("v") === "interna";
   const buffer = await renderToBuffer(BudgetPdf({ budget, company, internal }));
 

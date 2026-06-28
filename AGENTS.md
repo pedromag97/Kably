@@ -27,10 +27,14 @@ identificadores de código em inglês.
 ## Stack (e porquê)
 
 - **Next.js 16** (App Router, Server Actions) + Tailwind 4 + TypeScript
-- **SQLite via `node:sqlite`** (módulo embutido do Node ≥ 24) — decisão
-  deliberada: o portátil original é **Windows ARM64** e o Prisma não tem
-  binário compatível; `node:sqlite` não tem dependências nativas. Não migrar
-  para Prisma/better-sqlite3 sem motivo forte.
+- **Camada de dados com dois drivers, mesma API** (`src/lib/db.ts`, assíncrona):
+  - **Local** (incl. Windows ARM64): adaptador sobre `node:sqlite` em
+    `data/kably.db`. Sem binários nativos (o Prisma e o `@libsql/client` nativo
+    NÃO têm binário ARM64 — por isso esta escolha).
+  - **Produção (Turso)**: cliente web libSQL puro-JS (`@libsql/client/web`,
+    via HTTP). Ativado definindo `DATABASE_URL=libsql://…` + `DATABASE_AUTH_TOKEN`.
+  - O adaptador expõe só `execute/batch/executeMultiple`. Deletes em cascata
+    são **explícitos** (batch) para o comportamento ser idêntico local e remoto.
 - **@react-pdf/renderer** para PDFs no servidor (está em
   `serverExternalPackages` no next.config.ts).
 - BD criada e pré-carregada automaticamente no primeiro arranque em

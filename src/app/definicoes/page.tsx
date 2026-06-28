@@ -3,7 +3,7 @@ import CompanySettings from "@/components/CompanySettings";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  const company = getCompany();
+export default async function SettingsPage() {
+  const company = await getCompany();
   return <CompanySettings company={company} />;
 }

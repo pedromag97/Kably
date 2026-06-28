@@ -10,8 +10,8 @@ export default async function BudgetPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const budget = getBudget(Number(id));
+  const budget = await getBudget(Number(id));
   if (!budget) notFound();
-  const articles = listArticles();
+  const articles = await listArticles();
   return <BudgetEditor budget={budget} articles={articles} />;
 }
