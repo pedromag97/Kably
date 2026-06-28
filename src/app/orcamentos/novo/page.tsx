@@ -1,10 +1,12 @@
 import { createBudgetAction } from "@/app/actions";
 import { VAT_MODES } from "@/lib/calc";
+import { requireUser } from "@/lib/session";
 
 const inputCls =
   "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
-export default function NewBudgetPage() {
+export default async function NewBudgetPage() {
+  await requireUser();
   return (
     <div className="max-w-xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Novo orçamento</h1>

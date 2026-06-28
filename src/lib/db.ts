@@ -1,12 +1,7 @@
-import { createRequire } from "node:module";
 import { createClient as createWebClient } from "@libsql/client/web";
 import fs from "node:fs";
 import path from "node:path";
 import { SEED_ARTICLES, DEFAULT_CONDITIONS } from "./seed-data";
-
-// node:sqlite só é carregado quando se usa o ficheiro local (dev). Em produção
-// (Turso, via cliente web) nunca é tocado — evita depender da versão de Node do host.
-const requireCjs = createRequire(import.meta.url);
 import type {
   Article,
   Budget,
@@ -15,6 +10,7 @@ import type {
   BudgetChapter,
   Company,
   Expense,
+  User,
   Worker,
 } from "./types";
 
@@ -117,6 +113,21 @@ CREATE TABLE IF NOT EXISTS budget_items (
   materialIncluded INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  passwordHash TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT 'member',
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  expiresAt TEXT NOT NULL
+);
 `;
 
 // ── Ligação ───────────────────────────────────────────────────────────
@@ -140,8 +151,10 @@ interface DbClient {
 }
 
 /** Adaptador node:sqlite com a forma da API libSQL (para desenvolvimento local). */
-function makeLocalClient(file: string): DbClient {
-  const { DatabaseSync } = requireCjs("node:sqlite") as typeof import("node:sqlite");
+function makeLocalClient(
+  DatabaseSync: typeof import("node:sqlite").DatabaseSync,
+  file: string
+): DbClient {
   const sdb = new DatabaseSync(file);
   sdb.exec("PRAGMA foreign_keys = ON");
   sdb.exec("PRAGMA journal_mode = WAL");
@@ -186,33 +199,29 @@ function makeLocalClient(file: string): DbClient {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __kablyClient: DbClient | undefined;
-  // eslint-disable-next-line no-var
   var __kablyReady: Promise<DbClient> | undefined;
 }
 
-function rawClient(): DbClient {
-  if (globalThis.__kablyClient) return globalThis.__kablyClient;
+async function connect(): Promise<DbClient> {
   const url = process.env.DATABASE_URL ?? "file:data/kably.db";
   const authToken = process.env.DATABASE_AUTH_TOKEN;
   if (url.startsWith("file:")) {
     const file = url.slice("file:".length);
     const dir = path.dirname(file);
     if (dir && dir !== ".") fs.mkdirSync(dir, { recursive: true });
-    globalThis.__kablyClient = makeLocalClient(file);
-  } else {
-    globalThis.__kablyClient = createWebClient(
-      authToken ? { url, authToken } : { url }
-    ) as unknown as DbClient;
+    // import dinâmico: node:sqlite só é carregado no modo ficheiro (dev).
+    // Em produção (Turso) nunca é tocado — independente da versão de Node do host.
+    const { DatabaseSync } = await import("node:sqlite");
+    return makeLocalClient(DatabaseSync, file);
   }
-  return globalThis.__kablyClient;
+  return createWebClient(authToken ? { url, authToken } : { url }) as unknown as DbClient;
 }
 
 /** Devolve o cliente, garantindo schema + migração + seed uma única vez. */
 async function db(): Promise<DbClient> {
   if (!globalThis.__kablyReady) {
     globalThis.__kablyReady = (async () => {
-      const c = rawClient();
+      const c = await connect();
       await c.executeMultiple(SCHEMA);
       await migrate(c);
       await seed(c);
@@ -615,4 +624,84 @@ export async function setItemMaterialIncluded(id: number, included: boolean): Pr
 export async function deleteItem(id: number): Promise<void> {
   const c = await db();
   await c.execute({ sql: "DELETE FROM budget_items WHERE id=?", args: [id] });
+}
+
+// ── Utilizadores e sessões ────────────────────────────────────────────
+
+export async function countUsers(): Promise<number> {
+  const c = await db();
+  const r = await c.execute("SELECT COUNT(*) AS n FROM users");
+  return Number((r.rows[0] as Record<string, unknown>).n);
+}
+
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  const c = await db();
+  return firstRow<User>(
+    await c.execute({
+      sql: "SELECT * FROM users WHERE email=?",
+      args: [email.trim().toLowerCase()],
+    })
+  );
+}
+
+export async function listUsers(): Promise<User[]> {
+  const c = await db();
+  return rowsToObjects<User>(
+    await c.execute("SELECT * FROM users ORDER BY (role='owner') DESC, email")
+  );
+}
+
+export async function createUser(u: {
+  companyId: number;
+  email: string;
+  passwordHash: string;
+  name: string;
+  role: string;
+}): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO users (companyId, email, passwordHash, name, role) VALUES (?,?,?,?,?)",
+    args: [u.companyId, u.email.trim().toLowerCase(), u.passwordHash, u.name, u.role],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      { sql: "DELETE FROM sessions WHERE userId=?", args: [id] },
+      { sql: "DELETE FROM users WHERE id=?", args: [id] },
+    ],
+    "write"
+  );
+}
+
+export async function createSession(
+  id: string,
+  userId: number,
+  expiresAt: string
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "INSERT INTO sessions (id, userId, expiresAt) VALUES (?,?,?)",
+    args: [id, userId, expiresAt],
+  });
+}
+
+/** Devolve o utilizador da sessão (se válida e não expirada). */
+export async function getSessionUser(sessionId: string): Promise<User | undefined> {
+  const c = await db();
+  return firstRow<User>(
+    await c.execute({
+      sql: `SELECT u.* FROM sessions s JOIN users u ON u.id = s.userId
+            WHERE s.id=? AND s.expiresAt > datetime('now')`,
+      args: [sessionId],
+    })
+  );
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const c = await db();
+  await c.execute({ sql: "DELETE FROM sessions WHERE id=?", args: [id] });
 }

@@ -2,10 +2,12 @@ import Link from "next/link";
 import { listBudgets, getBudget } from "@/lib/db";
 import { budgetTotals, eur, VAT_MODES } from "@/lib/calc";
 import { deleteBudgetAction } from "./actions";
+import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  await requireUser();
   const budgets = await listBudgets();
   const withTotals = await Promise.all(
     budgets.map(async (b) => ({ b, totals: budgetTotals((await getBudget(b.id))!) }))

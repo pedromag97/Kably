@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+import { getCurrentUser } from "@/lib/session";
+import { logoutAction } from "./actions";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,18 +25,24 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-const navLinks = [
-  { href: "/", label: "Orçamentos" },
-  { href: "/artigos", label: "Artigos" },
-  { href: "/custos", label: "Custos" },
-  { href: "/definicoes", label: "Definições" },
-];
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getCurrentUser();
+  const links = [
+    { href: "/", label: "Orçamentos" },
+    { href: "/artigos", label: "Artigos" },
+    ...(user?.role === "owner"
+      ? [
+          { href: "/custos", label: "Custos" },
+          { href: "/equipa", label: "Equipa" },
+        ]
+      : []),
+    { href: "/definicoes", label: "Definições" },
+  ];
+
   return (
     <html
       lang="pt-PT"
@@ -42,21 +50,38 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <header className="bg-slate-900 text-white sticky top-0 z-20 shadow">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-6">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
             <Link href="/" className="text-xl font-bold tracking-tight">
               ⚡ Kably
             </Link>
-            <nav className="flex gap-1 text-sm">
-              {navLinks.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
+            {user && (
+              <>
+                <nav className="flex gap-1 text-sm">
+                  {links.map((l) => (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      className="px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
+                    >
+                      {l.label}
+                    </Link>
+                  ))}
+                </nav>
+                <div className="ml-auto flex items-center gap-3 text-sm">
+                  <span className="text-slate-300 hidden sm:inline">
+                    {user.name || user.email}
+                  </span>
+                  <form action={logoutAction}>
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600"
+                    >
+                      Sair
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
           </div>
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 py-6 flex-1">{children}</main>

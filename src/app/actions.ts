@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as store from "@/lib/db";
 import { DEFAULT_CHAPTERS } from "@/lib/seed-data";
+import { endSession } from "@/lib/session";
 import type { VatMode } from "@/lib/types";
+
+export async function logoutAction() {
+  await endSession();
+  redirect("/login");
+}
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();

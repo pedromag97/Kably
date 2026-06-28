@@ -14,6 +14,18 @@ export type Company = {
   targetProfitPct: number; // lucro-alvo usado na página de custos
 };
 
+export type UserRole = "owner" | "member";
+
+export type User = {
+  id: number;
+  companyId: number;
+  email: string;
+  passwordHash: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+};
+
 export type Article = {
   id: number;
   companyId: number;

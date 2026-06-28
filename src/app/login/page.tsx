@@ -1,21 +1,21 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { AUTH_COOKIE, hashPassword } from "@/lib/auth";
+import { countUsers, getUserByEmail } from "@/lib/db";
+import { startSession, verifyPassword } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
+
+const inputCls =
+  "border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 async function loginAction(fd: FormData) {
   "use server";
-  const attempt = String(fd.get("password") ?? "");
-  const password = process.env.KABLY_PASSWORD ?? "";
-  if (!password || attempt !== password) {
+  const email = String(fd.get("email") ?? "").trim().toLowerCase();
+  const password = String(fd.get("password") ?? "");
+  const user = await getUserByEmail(email);
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
     redirect("/login?erro=1");
   }
-  const jar = await cookies();
-  jar.set(AUTH_COOKIE, await hashPassword(password), {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365, // 1 ano
-    path: "/",
-  });
+  await startSession(user.id);
   redirect("/");
 }
 
@@ -24,28 +24,32 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ erro?: string }>;
 }) {
+  // Primeira utilização (sem contas) → criar conta de administrador.
+  if ((await countUsers()) === 0) redirect("/setup");
   const { erro } = await searchParams;
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <form
         action={loginAction}
-        className="bg-white rounded-xl border border-slate-200 p-8 w-full max-w-sm grid gap-4 text-center"
+        className="bg-white rounded-xl border border-slate-200 p-8 w-full max-w-sm grid gap-4"
       >
-        <div className="text-3xl">⚡</div>
-        <h1 className="text-xl font-bold">Kably</h1>
-        <p className="text-sm text-slate-500">
-          Introduz a palavra-passe para aceder.
-        </p>
-        <input
-          type="password"
-          name="password"
-          required
-          autoFocus
-          placeholder="Palavra-passe"
-          className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="text-center">
+          <div className="text-3xl">⚡</div>
+          <h1 className="text-xl font-bold">Kably</h1>
+          <p className="text-sm text-slate-500 mt-1">Entra com a tua conta.</p>
+        </div>
+        <label className="grid gap-1 text-sm font-medium">
+          Email
+          <input name="email" type="email" required autoFocus className={inputCls} />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Palavra-passe
+          <input name="password" type="password" required className={inputCls} />
+        </label>
         {erro && (
-          <p className="text-sm text-red-600">Palavra-passe incorreta.</p>
+          <p className="text-sm text-red-600 text-center">
+            Email ou palavra-passe incorretos.
+          </p>
         )}
         <button
           type="submit"

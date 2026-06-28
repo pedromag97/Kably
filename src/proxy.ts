@@ -1,24 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE, hashPassword } from "@/lib/auth";
 
-const PUBLIC_PREFIXES = ["/login", "/_next", "/favicon.ico"];
+// Verificação grosseira no edge: existe cookie de sessão? A validação real
+// (sessão na BD, expiração) é feita server-side em requireUser(). Aqui não há
+// acesso a BD nem node:crypto — só presença do cookie, para a UX de redirect.
+const SESSION_COOKIE = "kably_session";
+const PUBLIC_PREFIXES = ["/login", "/setup", "/_next", "/favicon.ico"];
 
-export async function proxy(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
-
-  // Sem KABLY_PASSWORD definida não há autenticação (uso local).
-  // Define-a sempre antes de expor a app à internet.
-  const password = process.env.KABLY_PASSWORD;
-  if (!password) return NextResponse.next();
-
-  const cookie = req.cookies.get(AUTH_COOKIE)?.value;
-  if (cookie === (await hashPassword(password))) {
+  if (req.cookies.get(SESSION_COOKIE)?.value) {
     return NextResponse.next();
   }
-
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";
