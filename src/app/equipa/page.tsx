@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createUser, deleteUser, getCompany, listUsers } from "@/lib/db";
+import { createUser, deleteUser, listUsers } from "@/lib/db";
 import { hashPassword, requireOwner } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -10,17 +10,16 @@ const inputCls =
 
 async function addUserAction(fd: FormData) {
   "use server";
-  await requireOwner();
+  const owner = await requireOwner();
   const name = String(fd.get("name") ?? "").trim();
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
   const role = String(fd.get("role") ?? "member") === "owner" ? "owner" : "member";
   if (!email.includes("@") || password.length < 8) redirect("/equipa?erro=dados");
-  const company = await getCompany();
   let failed = false;
   try {
     await createUser({
-      companyId: company.id,
+      companyId: owner.companyId,
       email,
       passwordHash: await hashPassword(password),
       name,
@@ -39,7 +38,7 @@ async function removeUserAction(fd: FormData) {
   const me = await requireOwner();
   const userId = Number(fd.get("userId"));
   if (userId === me.id) redirect("/equipa?erro=auto");
-  await deleteUser(userId);
+  await deleteUser(me.companyId, userId);
   revalidatePath("/equipa");
   redirect("/equipa");
 }
@@ -56,7 +55,7 @@ export default async function TeamPage({
   searchParams: Promise<{ erro?: string }>;
 }) {
   const me = await requireOwner();
-  const [users, { erro }] = await Promise.all([listUsers(), searchParams]);
+  const [users, { erro }] = await Promise.all([listUsers(me.companyId), searchParams]);
 
   return (
     <div className="max-w-3xl mx-auto grid gap-6">

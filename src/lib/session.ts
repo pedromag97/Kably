@@ -9,7 +9,8 @@ import * as store from "./db";
 import type { User } from "./types";
 
 export const SESSION_COOKIE = "kably_session";
-const MAX_AGE_S = 60 * 60 * 24 * 30; // 30 dias
+const MAX_AGE_DAYS = 30;
+const MAX_AGE_S = 60 * 60 * 24 * MAX_AGE_DAYS;
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);
@@ -21,8 +22,7 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 
 export async function startSession(userId: number): Promise<void> {
   const id = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + MAX_AGE_S * 1000).toISOString();
-  await store.createSession(id, userId, expiresAt);
+  await store.createSession(id, userId, MAX_AGE_DAYS);
   const jar = await cookies();
   jar.set(SESSION_COOKIE, id, {
     httpOnly: true,

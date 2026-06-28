@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as store from "@/lib/db";
 import { DEFAULT_CHAPTERS } from "@/lib/seed-data";
-import { endSession } from "@/lib/session";
+import { endSession, requireOwner, requireUser } from "@/lib/session";
 import type { VatMode } from "@/lib/types";
 
 export async function logoutAction() {
@@ -21,10 +21,19 @@ function flt(fd: FormData, key: string, fallback = 0): number {
   return Number.isFinite(v) ? v : fallback;
 }
 
+/** Verifica sessão + posse do orçamento. Devolve companyId ou null (sem acesso). */
+async function ownedBudget(budgetId: number): Promise<number | null> {
+  const user = await requireUser();
+  const ok = await store.budgetBelongsTo(user.companyId, budgetId);
+  return ok ? user.companyId : null;
+}
+
 // ── Orçamentos ────────────────────────────────────────────────────────
 
 export async function createBudgetAction(fd: FormData) {
+  const user = await requireUser();
   const id = await store.createBudget(
+    user.companyId,
     {
       title: str(fd, "title") || "Instalação elétrica",
       clientName: str(fd, "clientName"),
@@ -41,7 +50,9 @@ export async function createBudgetAction(fd: FormData) {
 }
 
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
-  await store.updateBudget(budgetId, {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  await store.updateBudget(companyId, budgetId, {
     title: str(fd, "title"),
     clientName: str(fd, "clientName"),
     clientNif: str(fd, "clientNif"),
@@ -61,24 +72,28 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
 }
 
 export async function deleteBudgetAction(budgetId: number) {
-  await store.deleteBudget(budgetId);
+  const user = await requireUser();
+  await store.deleteBudget(user.companyId, budgetId);
   revalidatePath("/");
 }
 
 // ── Capítulos ─────────────────────────────────────────────────────────
 
 export async function addChapterAction(budgetId: number, name: string) {
+  if (!(await ownedBudget(budgetId))) return;
   await store.addChapter(budgetId, name.trim() || "Novo capítulo");
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function renameChapterAction(budgetId: number, chapterId: number, name: string) {
-  await store.renameChapter(chapterId, name.trim() || "Capítulo");
+  if (!(await ownedBudget(budgetId))) return;
+  await store.renameChapter(budgetId, chapterId, name.trim() || "Capítulo");
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function deleteChapterAction(budgetId: number, chapterId: number) {
-  await store.deleteChapter(chapterId);
+  if (!(await ownedBudget(budgetId))) return;
+  await store.deleteChapter(budgetId, chapterId);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -90,9 +105,11 @@ export async function addItemFromArticleAction(
   articleId: number,
   quantity: number
 ) {
-  const a = await store.getArticle(articleId);
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const a = await store.getArticle(companyId, articleId);
   if (!a) return;
-  await store.addItem(chapterId, {
+  await store.addItem(budgetId, chapterId, {
     articleId: a.id,
     name: a.name,
     unit: a.unit,
@@ -104,7 +121,8 @@ export async function addItemFromArticleAction(
 }
 
 export async function addBlankItemAction(budgetId: number, chapterId: number) {
-  await store.addItem(chapterId, {
+  if (!(await ownedBudget(budgetId))) return;
+  await store.addItem(budgetId, chapterId, {
     articleId: null,
     name: "",
     unit: "un",
@@ -120,12 +138,14 @@ export async function updateItemAction(
   itemId: number,
   item: { name: string; unit: string; quantity: number; materialCost: number; laborHours: number }
 ) {
-  await store.updateItem(itemId, item);
+  if (!(await ownedBudget(budgetId))) return;
+  await store.updateItem(budgetId, itemId, item);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 export async function deleteItemAction(budgetId: number, itemId: number) {
-  await store.deleteItem(itemId);
+  if (!(await ownedBudget(budgetId))) return;
+  await store.deleteItem(budgetId, itemId);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -134,20 +154,21 @@ export async function setItemMaterialIncludedAction(
   itemId: number,
   included: boolean
 ) {
-  await store.setItemMaterialIncluded(itemId, included);
+  if (!(await ownedBudget(budgetId))) return;
+  await store.setItemMaterialIncluded(budgetId, itemId, included);
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
 // ── Importação de MQT ─────────────────────────────────────────────────
 
 export type ImportLine = {
-  mqtText: string; // designação original no MQT
+  mqtText: string;
   unit: string;
   quantity: number;
   choice:
     | { kind: "article"; articleId: number }
-    | { kind: "new" } // criar artigo novo na base (custos a zero, a preencher)
-    | { kind: "loose" } // linha avulsa só neste orçamento
+    | { kind: "new" }
+    | { kind: "loose" }
     | { kind: "ignore" };
 };
 
@@ -155,14 +176,17 @@ export type ImportMeta = {
   title: string;
   clientName: string;
   vatMode: VatMode;
-  laborOnly: boolean; // só mão de obra — material fornecido pelo cliente
+  laborOnly: boolean;
 };
 
 export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
+  const user = await requireUser();
+  const companyId = user.companyId;
   const { CATEGORY_TO_CHAPTER, FALLBACK_CHAPTER, CHAPTER_ORDER, normalizeText } =
     await import("@/lib/matching");
 
   const budgetId = await store.createBudget(
+    companyId,
     {
       title: meta.title.trim() || "Orçamento importado de MQT",
       clientName: meta.clientName.trim(),
@@ -172,13 +196,12 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
       siteAddress: "",
       vatMode: meta.vatMode || "NORMAL",
     },
-    [] // capítulos criados abaixo, só os que têm itens
+    []
   );
   if (meta.laborOnly) {
-    await store.updateBudget(budgetId, { laborOnly: 1 });
+    await store.updateBudget(companyId, budgetId, { laborOnly: 1 });
   }
 
-  // Resolver cada linha num item + capítulo de destino
   const resolved: {
     chapter: string;
     item: {
@@ -196,9 +219,9 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     const quantity = line.quantity > 0 ? line.quantity : 1;
 
     if (line.choice.kind === "article") {
-      const a = await store.getArticle(line.choice.articleId);
+      const a = await store.getArticle(companyId, line.choice.articleId);
       if (!a) continue;
-      await store.saveAlias(normalizeText(line.mqtText), a.id); // memorizar para o próximo MQT
+      await store.saveAlias(companyId, normalizeText(line.mqtText), a.id);
       resolved.push({
         chapter: CATEGORY_TO_CHAPTER[a.category] ?? FALLBACK_CHAPTER,
         item: {
@@ -211,7 +234,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         },
       });
     } else if (line.choice.kind === "new") {
-      const articleId = await store.createArticle({
+      const articleId = await store.createArticle(companyId, {
         code: "MQT",
         name: line.mqtText.slice(0, 200),
         category: "Diversos",
@@ -220,7 +243,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         laborHours: 0,
         notes: "Criado por importação de MQT — preencher custos",
       });
-      await store.saveAlias(normalizeText(line.mqtText), articleId);
+      await store.saveAlias(companyId, normalizeText(line.mqtText), articleId);
       resolved.push({
         chapter: FALLBACK_CHAPTER,
         item: {
@@ -233,7 +256,6 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         },
       });
     } else {
-      // linha avulsa
       resolved.push({
         chapter: FALLBACK_CHAPTER,
         item: {
@@ -248,14 +270,11 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     }
   }
 
-  // Criar só os capítulos com itens, pela ordem habitual
-  const chapters = CHAPTER_ORDER.filter((ch) =>
-    resolved.some((r) => r.chapter === ch)
-  );
+  const chapters = CHAPTER_ORDER.filter((ch) => resolved.some((r) => r.chapter === ch));
   for (const chName of chapters) {
     const chapterId = await store.addChapter(budgetId, chName);
     for (const r of resolved.filter((x) => x.chapter === chName)) {
-      await store.addItem(chapterId, r.item);
+      await store.addItem(budgetId, chapterId, r.item);
     }
   }
 
@@ -266,7 +285,8 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
 // ── Artigos ───────────────────────────────────────────────────────────
 
 export async function createArticleAction(fd: FormData) {
-  await store.createArticle({
+  const user = await requireUser();
+  await store.createArticle(user.companyId, {
     code: str(fd, "code"),
     name: str(fd, "name") || "Novo artigo",
     category: str(fd, "category") || "Diversos",
@@ -279,7 +299,8 @@ export async function createArticleAction(fd: FormData) {
 }
 
 export async function updateArticleAction(articleId: number, fd: FormData) {
-  await store.updateArticle(articleId, {
+  const user = await requireUser();
+  await store.updateArticle(user.companyId, articleId, {
     code: str(fd, "code"),
     name: str(fd, "name") || "Artigo",
     category: str(fd, "category") || "Diversos",
@@ -292,11 +313,12 @@ export async function updateArticleAction(articleId: number, fd: FormData) {
 }
 
 export async function deleteArticleAction(articleId: number) {
-  await store.deleteArticle(articleId);
+  const user = await requireUser();
+  await store.deleteArticle(user.companyId, articleId);
   revalidatePath("/artigos");
 }
 
-// ── Custos da empresa ─────────────────────────────────────────────────
+// ── Custos da empresa (só dono) ───────────────────────────────────────
 
 export type CostsPayload = {
   workers: Omit<import("@/lib/types").Worker, "id" | "companyId" | "position">[];
@@ -305,7 +327,9 @@ export type CostsPayload = {
 };
 
 export async function saveCostsAction(payload: CostsPayload) {
+  const user = await requireOwner();
   await store.saveCosts(
+    user.companyId,
     payload.workers.map((w, i) => ({ ...w, position: i })),
     payload.expenses.map((e, i) => ({ ...e, position: i })),
     payload.targetProfitPct
@@ -313,10 +337,11 @@ export async function saveCostsAction(payload: CostsPayload) {
   revalidatePath("/custos");
 }
 
-// ── Empresa ───────────────────────────────────────────────────────────
+// ── Empresa (só dono) ─────────────────────────────────────────────────
 
 export async function saveCompanyAction(fd: FormData) {
-  await store.saveCompany({
+  const user = await requireOwner();
+  await store.saveCompany(user.companyId, {
     name: str(fd, "name") || "A Minha Empresa",
     nif: str(fd, "nif"),
     email: str(fd, "email"),

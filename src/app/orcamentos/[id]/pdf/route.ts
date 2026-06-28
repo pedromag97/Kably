@@ -10,14 +10,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await getCurrentUser())) {
+  const user = await getCurrentUser();
+  if (!user) {
     return new Response("Não autorizado", { status: 401 });
   }
   const { id } = await params;
-  const budget = await getBudget(Number(id));
+  const budget = await getBudget(user.companyId, Number(id));
   if (!budget) return new Response("Orçamento não encontrado", { status: 404 });
 
-  const company = await getCompany();
+  const company = await getCompany(user.companyId);
   const internal = req.nextUrl.searchParams.get("v") === "interna";
   const buffer = await renderToBuffer(BudgetPdf({ budget, company, internal }));
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { countUsers, getUserByEmail } from "@/lib/db";
 import { startSession, verifyPassword } from "@/lib/session";
@@ -24,9 +25,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ erro?: string }>;
 }) {
-  // Primeira utilização (sem contas) → criar conta de administrador.
-  if ((await countUsers()) === 0) redirect("/setup");
-  const { erro } = await searchParams;
+  const [{ erro }, semContas] = await Promise.all([
+    searchParams,
+    countUsers().then((n) => n === 0),
+  ]);
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <form
@@ -57,6 +59,20 @@ export default async function LoginPage({
         >
           Entrar
         </button>
+        <p className="text-sm text-slate-500 text-center">
+          Não tens conta?{" "}
+          <Link href="/registo" className="text-blue-600 hover:underline font-medium">
+            Criar conta
+          </Link>
+        </p>
+        {semContas && (
+          <p className="text-xs text-slate-400 text-center border-t border-slate-100 pt-3">
+            Primeira utilização desta instalação?{" "}
+            <Link href="/setup" className="text-slate-500 hover:underline">
+              Configurar conta de administrador
+            </Link>
+          </p>
+        )}
       </form>
     </div>
   );

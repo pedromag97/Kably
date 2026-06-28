@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { countUsers, createUser, getCompany } from "@/lib/db";
+import { countUsers, createUser, firstCompanyId } from "@/lib/db";
 import { hashPassword, startSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -7,19 +7,21 @@ export const dynamic = "force-dynamic";
 const inputCls =
   "border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
+// Reclamar a empresa existente: só quando há dados mas ainda nenhuma conta
+// (migração da fase pré-contas). Novas empresas usam /registo.
 async function setupAction(fd: FormData) {
   "use server";
-  // Só permitido enquanto não existir nenhuma conta.
   if ((await countUsers()) > 0) redirect("/login");
+  const companyId = await firstCompanyId();
+  if (companyId === null) redirect("/registo");
   const name = String(fd.get("name") ?? "").trim();
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
   if (!email.includes("@") || password.length < 8) {
     redirect("/setup?erro=1");
   }
-  const company = await getCompany();
   const id = await createUser({
-    companyId: company.id,
+    companyId,
     email,
     passwordHash: await hashPassword(password),
     name,
@@ -35,6 +37,7 @@ export default async function SetupPage({
   searchParams: Promise<{ erro?: string }>;
 }) {
   if ((await countUsers()) > 0) redirect("/login");
+  if ((await firstCompanyId()) === null) redirect("/registo");
   const { erro } = await searchParams;
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -44,9 +47,9 @@ export default async function SetupPage({
       >
         <div className="text-center">
           <div className="text-3xl">⚡</div>
-          <h1 className="text-xl font-bold">Criar conta de administrador</h1>
+          <h1 className="text-xl font-bold">Conta de administrador</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Primeira utilização — cria a conta de dono da empresa.
+            Cria a conta de dono para a empresa já existente.
           </p>
         </div>
         <label className="grid gap-1 text-sm font-medium">

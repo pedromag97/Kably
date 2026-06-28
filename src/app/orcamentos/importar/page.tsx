@@ -5,11 +5,11 @@ import { requireUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
-  await requireUser();
+  const user = await requireUser();
   const [articles, aliases, company] = await Promise.all([
-    listArticles(),
-    listAliases(),
-    getCompany(),
+    listArticles(user.companyId),
+    listAliases(user.companyId),
+    getCompany(user.companyId),
   ]);
   return <MqtImporter articles={articles} aliases={aliases} company={company} />;
 }

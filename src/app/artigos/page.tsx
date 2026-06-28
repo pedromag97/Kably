@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export default async function ArticlesPage() {
-  await requireUser();
-  const articles = await listArticles();
+  const user = await requireUser();
+  const articles = await listArticles(user.companyId);
   return <ArticlesManager articles={articles} />;
 }

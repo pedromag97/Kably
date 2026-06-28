@@ -10,10 +10,10 @@ export default async function BudgetPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
-  const budget = await getBudget(Number(id));
+  const budget = await getBudget(user.companyId, Number(id));
   if (!budget) notFound();
-  const articles = await listArticles();
+  const articles = await listArticles(user.companyId);
   return <BudgetEditor budget={budget} articles={articles} />;
 }

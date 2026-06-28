@@ -7,10 +7,13 @@ import { requireUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  await requireUser();
-  const budgets = await listBudgets();
+  const user = await requireUser();
+  const budgets = await listBudgets(user.companyId);
   const withTotals = await Promise.all(
-    budgets.map(async (b) => ({ b, totals: budgetTotals((await getBudget(b.id))!) }))
+    budgets.map(async (b) => ({
+      b,
+      totals: budgetTotals((await getBudget(user.companyId, b.id))!),
+    }))
   );
 
   return (

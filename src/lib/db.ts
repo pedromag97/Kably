@@ -133,8 +133,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 // ── Ligação ───────────────────────────────────────────────────────────
 // Local (qualquer SO, incl. Windows ARM64): node:sqlite sobre ficheiro.
 // Produção (Turso): cliente web libSQL puro-JS via HTTP (sem binários nativos).
-// As duas implementações expõem a mesma forma (execute/batch/executeMultiple),
-// por isso passar à cloud é só definir DATABASE_URL=libsql://… + DATABASE_AUTH_TOKEN.
 
 type SqlArg = string | number | bigint | null;
 type Stmt = string | { sql: string; args?: SqlArg[] };
@@ -210,29 +208,26 @@ async function connect(): Promise<DbClient> {
     const dir = path.dirname(file);
     if (dir && dir !== ".") fs.mkdirSync(dir, { recursive: true });
     // import dinâmico: node:sqlite só é carregado no modo ficheiro (dev).
-    // Em produção (Turso) nunca é tocado — independente da versão de Node do host.
     const { DatabaseSync } = await import("node:sqlite");
     return makeLocalClient(DatabaseSync, file);
   }
   return createWebClient(authToken ? { url, authToken } : { url }) as unknown as DbClient;
 }
 
-/** Devolve o cliente, garantindo schema + migração + seed uma única vez. */
+/** Cliente pronto (schema + migração) uma única vez. Sem auto-seed: as empresas
+ *  são criadas no registo (cada uma com a sua base de artigos). */
 async function db(): Promise<DbClient> {
   if (!globalThis.__kablyReady) {
     globalThis.__kablyReady = (async () => {
       const c = await connect();
       await c.executeMultiple(SCHEMA);
       await migrate(c);
-      await seed(c);
       return c;
     })();
   }
   return globalThis.__kablyReady;
 }
 
-// Colunas acrescentadas após a primeira versão — CREATE TABLE IF NOT EXISTS
-// não altera tabelas existentes, por isso adicionam-se aqui se faltarem.
 async function migrate(c: DbClient) {
   const addColumn = async (table: string, column: string, ddl: string) => {
     const info = await c.execute(`PRAGMA table_info(${table})`);
@@ -245,35 +240,9 @@ async function migrate(c: DbClient) {
   await addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
 }
 
-async function seed(c: DbClient) {
-  const r = await c.execute("SELECT COUNT(*) AS n FROM companies");
-  if (Number((r.rows[0] as Record<string, unknown>).n) > 0) return;
-  const ins = await c.execute({
-    sql: "INSERT INTO companies (name, nif, email, phone, address, conditions) VALUES (?,?,?,?,?,?)",
-    args: [
-      "A Minha Empresa, Lda.",
-      "500000000",
-      "geral@empresa.pt",
-      "910 000 000",
-      "Rua Exemplo 1, 0000-000 Lisboa",
-      DEFAULT_CONDITIONS,
-    ],
-  });
-  const companyId = Number(ins.lastInsertRowid);
-  await c.batch(
-    SEED_ARTICLES.map(([code, name, category, unit, materialCost, laborHours]) => ({
-      sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours) VALUES (?,?,?,?,?,?,?)",
-      args: [companyId, code, name, category, unit, materialCost, laborHours],
-    })),
-    "write"
-  );
-}
-
 // ── Mapeamento de linhas → objetos simples ────────────────────────────
-// (o React Server Components só serializa objetos simples)
 
 function rowsToObjects<T>(rs: Res): T[] {
-  // No modo local as linhas já são objetos; no modo web mapeamos por coluna.
   if (rs.columns.length === 0) return rs.rows as T[];
   return rs.rows.map((row) => {
     const o: Record<string, unknown> = {};
@@ -286,75 +255,125 @@ function firstRow<T>(rs: Res): T | undefined {
   return rowsToObjects<T>(rs)[0];
 }
 
-// ── Empresa ───────────────────────────────────────────────────────────
+function scalar(rs: Res, col: string): number {
+  return Number((rs.rows[0] as Record<string, unknown>)?.[col] ?? 0);
+}
 
-export async function getCompany(): Promise<Company> {
+// ── Empresa (registo + leitura) ───────────────────────────────────────
+
+/** id da 1.ª empresa — usado só pelo /setup legado (reclamar empresa existente). */
+export async function firstCompanyId(): Promise<number | null> {
   const c = await db();
-  const rs = await c.execute("SELECT * FROM companies ORDER BY id LIMIT 1");
-  return firstRow<Company>(rs)!;
+  const row = firstRow<{ id: number }>(
+    await c.execute("SELECT id FROM companies ORDER BY id LIMIT 1")
+  );
+  return row ? Number(row.id) : null;
+}
+
+export async function createCompany(name: string): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO companies (name, conditions) VALUES (?,?)",
+    args: [name, DEFAULT_CONDITIONS],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/** Carrega a base de artigos de referência numa empresa (no registo). */
+export async function seedCompanyArticles(companyId: number): Promise<void> {
+  const c = await db();
+  await c.batch(
+    SEED_ARTICLES.map(([code, name, category, unit, materialCost, laborHours]) => ({
+      sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours) VALUES (?,?,?,?,?,?,?)",
+      args: [companyId, code, name, category, unit, materialCost, laborHours],
+    })),
+    "write"
+  );
+}
+
+export async function getCompany(companyId: number): Promise<Company> {
+  const c = await db();
+  return firstRow<Company>(
+    await c.execute({ sql: "SELECT * FROM companies WHERE id=?", args: [companyId] })
+  )!;
 }
 
 export async function saveCompany(
+  companyId: number,
   data: Omit<Company, "id" | "targetProfitPct">
 ): Promise<void> {
   const c = await db();
-  const company = await getCompany();
   await c.execute({
     sql: `UPDATE companies SET name=?, nif=?, email=?, phone=?, address=?, logo=?,
        materialMargin=?, laborMargin=?, laborRate=?, validityDays=?, conditions=? WHERE id=?`,
     args: [
       data.name, data.nif, data.email, data.phone, data.address, data.logo,
       data.materialMargin, data.laborMargin, data.laborRate, data.validityDays,
-      data.conditions, company.id,
+      data.conditions, companyId,
     ],
   });
 }
 
 // ── Artigos ───────────────────────────────────────────────────────────
 
-export async function listArticles(): Promise<Article[]> {
+export async function listArticles(companyId: number): Promise<Article[]> {
   const c = await db();
   return rowsToObjects<Article>(
-    await c.execute("SELECT * FROM articles ORDER BY category, name")
+    await c.execute({
+      sql: "SELECT * FROM articles WHERE companyId=? ORDER BY category, name",
+      args: [companyId],
+    })
   );
 }
 
-export async function getArticle(id: number): Promise<Article | undefined> {
+export async function getArticle(
+  companyId: number,
+  id: number
+): Promise<Article | undefined> {
   const c = await db();
   return firstRow<Article>(
-    await c.execute({ sql: "SELECT * FROM articles WHERE id=?", args: [id] })
+    await c.execute({
+      sql: "SELECT * FROM articles WHERE id=? AND companyId=?",
+      args: [id, companyId],
+    })
   );
 }
 
-export async function createArticle(a: Omit<Article, "id" | "companyId">): Promise<number> {
+export async function createArticle(
+  companyId: number,
+  a: Omit<Article, "id" | "companyId">
+): Promise<number> {
   const c = await db();
-  const company = await getCompany();
   const r = await c.execute({
     sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours, notes) VALUES (?,?,?,?,?,?,?,?)",
-    args: [company.id, a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes],
+    args: [companyId, a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes],
   });
   return Number(r.lastInsertRowid);
 }
 
 export async function updateArticle(
+  companyId: number,
   id: number,
   a: Omit<Article, "id" | "companyId">
 ): Promise<void> {
   const c = await db();
   await c.execute({
-    sql: "UPDATE articles SET code=?, name=?, category=?, unit=?, materialCost=?, laborHours=?, notes=? WHERE id=?",
-    args: [a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes, id],
+    sql: "UPDATE articles SET code=?, name=?, category=?, unit=?, materialCost=?, laborHours=?, notes=? WHERE id=? AND companyId=?",
+    args: [a.code, a.name, a.category, a.unit, a.materialCost, a.laborHours, a.notes, id, companyId],
   });
 }
 
-export async function deleteArticle(id: number): Promise<void> {
+export async function deleteArticle(companyId: number, id: number): Promise<void> {
   const c = await db();
-  // cascata explícita (idêntico em local e Turso, sem depender de PRAGMA)
   await c.batch(
     [
-      { sql: "UPDATE budget_items SET articleId=NULL WHERE articleId=?", args: [id] },
-      { sql: "DELETE FROM mqt_aliases WHERE articleId=?", args: [id] },
-      { sql: "DELETE FROM articles WHERE id=?", args: [id] },
+      {
+        sql: `UPDATE budget_items SET articleId=NULL WHERE articleId=? AND chapterId IN
+              (SELECT bc.id FROM budget_chapters bc JOIN budgets b ON b.id=bc.budgetId WHERE b.companyId=?)`,
+        args: [id, companyId],
+      },
+      { sql: "DELETE FROM mqt_aliases WHERE articleId=? AND companyId=?", args: [id, companyId] },
+      { sql: "DELETE FROM articles WHERE id=? AND companyId=?", args: [id, companyId] },
     ],
     "write"
   );
@@ -362,80 +381,118 @@ export async function deleteArticle(id: number): Promise<void> {
 
 // ── Custos da empresa (trabalhadores + despesas) ──────────────────────
 
-export async function listWorkers(): Promise<Worker[]> {
+export async function listWorkers(companyId: number): Promise<Worker[]> {
   const c = await db();
   return rowsToObjects<Worker>(
-    await c.execute("SELECT * FROM workers ORDER BY position, id")
+    await c.execute({
+      sql: "SELECT * FROM workers WHERE companyId=? ORDER BY position, id",
+      args: [companyId],
+    })
   );
 }
 
-export async function listExpenses(): Promise<Expense[]> {
+export async function listExpenses(companyId: number): Promise<Expense[]> {
   const c = await db();
   return rowsToObjects<Expense>(
-    await c.execute("SELECT * FROM expenses ORDER BY category, position, id")
+    await c.execute({
+      sql: "SELECT * FROM expenses WHERE companyId=? ORDER BY category, position, id",
+      args: [companyId],
+    })
   );
 }
 
-/** Substitui todos os trabalhadores e despesas (replace-all atómico). */
+/** Substitui todos os trabalhadores e despesas da empresa (replace-all atómico). */
 export async function saveCosts(
+  companyId: number,
   workers: Omit<Worker, "id" | "companyId">[],
   expenses: Omit<Expense, "id" | "companyId">[],
   targetProfitPct: number
 ): Promise<void> {
   const c = await db();
-  const company = await getCompany();
   const stmts = [
-    { sql: "DELETE FROM workers WHERE companyId=?", args: [company.id] },
-    { sql: "DELETE FROM expenses WHERE companyId=?", args: [company.id] },
+    { sql: "DELETE FROM workers WHERE companyId=?", args: [companyId] },
+    { sql: "DELETE FROM expenses WHERE companyId=?", args: [companyId] },
     ...workers.map((w, i) => ({
       sql: `INSERT INTO workers (companyId, name, role, productive, grossSalary, months,
        tsuPct, insurancePct, mealAllowance, manualAnnualCost, workDays, hoursPerDay,
        productivityPct, position) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [
-        company.id, w.name, w.role, w.productive, w.grossSalary, w.months, w.tsuPct,
+        companyId, w.name, w.role, w.productive, w.grossSalary, w.months, w.tsuPct,
         w.insurancePct, w.mealAllowance, w.manualAnnualCost, w.workDays, w.hoursPerDay,
         w.productivityPct, i,
       ],
     })),
     ...expenses.map((e, i) => ({
       sql: "INSERT INTO expenses (companyId, category, name, amount, period, years, position) VALUES (?,?,?,?,?,?,?)",
-      args: [company.id, e.category, e.name, e.amount, e.period, e.years, i],
+      args: [companyId, e.category, e.name, e.amount, e.period, e.years, i],
     })),
-    { sql: "UPDATE companies SET targetProfitPct=? WHERE id=?", args: [targetProfitPct, company.id] },
+    { sql: "UPDATE companies SET targetProfitPct=? WHERE id=?", args: [targetProfitPct, companyId] },
   ];
   await c.batch(stmts, "write");
 }
 
 // ── Associações MQT memorizadas ───────────────────────────────────────
 
-export async function listAliases(): Promise<{ normText: string; articleId: number }[]> {
+export async function listAliases(
+  companyId: number
+): Promise<{ normText: string; articleId: number }[]> {
   const c = await db();
   return rowsToObjects<{ normText: string; articleId: number }>(
-    await c.execute("SELECT normText, articleId FROM mqt_aliases")
+    await c.execute({
+      sql: "SELECT normText, articleId FROM mqt_aliases WHERE companyId=?",
+      args: [companyId],
+    })
   );
 }
 
-export async function saveAlias(normText: string, articleId: number): Promise<void> {
+export async function saveAlias(
+  companyId: number,
+  normText: string,
+  articleId: number
+): Promise<void> {
   const c = await db();
-  const company = await getCompany();
   await c.execute({
     sql: `INSERT INTO mqt_aliases (companyId, normText, articleId) VALUES (?,?,?)
        ON CONFLICT(companyId, normText) DO UPDATE SET articleId=excluded.articleId`,
-    args: [company.id, normText, articleId],
+    args: [companyId, normText, articleId],
   });
 }
 
 // ── Orçamentos ────────────────────────────────────────────────────────
 
-export async function listBudgets(): Promise<Budget[]> {
+export async function listBudgets(companyId: number): Promise<Budget[]> {
   const c = await db();
-  return rowsToObjects<Budget>(await c.execute("SELECT * FROM budgets ORDER BY id DESC"));
+  return rowsToObjects<Budget>(
+    await c.execute({
+      sql: "SELECT * FROM budgets WHERE companyId=? ORDER BY id DESC",
+      args: [companyId],
+    })
+  );
 }
 
-export async function getBudget(id: number): Promise<BudgetFull | undefined> {
+/** True se o orçamento pertence à empresa — guarda para mutações. */
+export async function budgetBelongsTo(
+  companyId: number,
+  budgetId: number
+): Promise<boolean> {
+  const c = await db();
+  const rs = await c.execute({
+    sql: "SELECT 1 AS ok FROM budgets WHERE id=? AND companyId=?",
+    args: [budgetId, companyId],
+  });
+  return rs.rows.length > 0;
+}
+
+export async function getBudget(
+  companyId: number,
+  id: number
+): Promise<BudgetFull | undefined> {
   const c = await db();
   const budget = firstRow<Budget>(
-    await c.execute({ sql: "SELECT * FROM budgets WHERE id=?", args: [id] })
+    await c.execute({
+      sql: "SELECT * FROM budgets WHERE id=? AND companyId=?",
+      args: [id, companyId],
+    })
   );
   if (!budget) return undefined;
   const chapters = rowsToObjects<BudgetChapter>(
@@ -461,19 +518,18 @@ export async function getBudget(id: number): Promise<BudgetFull | undefined> {
   };
 }
 
-export async function nextBudgetNumber(): Promise<string> {
-  const c = await db();
+async function nextBudgetNumber(c: DbClient, companyId: number): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `ORC-${year}-`;
   const rs = await c.execute({
-    sql: "SELECT COUNT(*) AS n FROM budgets WHERE number LIKE ?",
-    args: [`${prefix}%`],
+    sql: "SELECT COUNT(*) AS n FROM budgets WHERE companyId=? AND number LIKE ?",
+    args: [companyId, `${prefix}%`],
   });
-  const n = Number((rs.rows[0] as Record<string, unknown>).n);
-  return `${prefix}${String(n + 1).padStart(3, "0")}`;
+  return `${prefix}${String(scalar(rs, "n") + 1).padStart(3, "0")}`;
 }
 
 export async function createBudget(
+  companyId: number,
   data: Pick<
     Budget,
     | "title" | "clientName" | "clientNif" | "clientEmail" | "clientPhone"
@@ -482,14 +538,14 @@ export async function createBudget(
   chapterNames: string[]
 ): Promise<number> {
   const c = await db();
-  const company = await getCompany();
-  const number = await nextBudgetNumber();
+  const company = await getCompany(companyId);
+  const number = await nextBudgetNumber(c, companyId);
   const r = await c.execute({
     sql: `INSERT INTO budgets (companyId, number, title, clientName, clientNif, clientEmail,
        clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate, validityDays)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     args: [
-      company.id, number, data.title, data.clientName, data.clientNif, data.clientEmail,
+      companyId, number, data.title, data.clientName, data.clientNif, data.clientEmail,
       data.clientPhone, data.siteAddress, data.vatMode, company.materialMargin,
       company.laborMargin, company.laborRate, company.validityDays,
     ],
@@ -507,7 +563,11 @@ export async function createBudget(
   return budgetId;
 }
 
-export async function updateBudget(id: number, fields: Partial<Budget>): Promise<void> {
+export async function updateBudget(
+  companyId: number,
+  id: number,
+  fields: Partial<Budget>
+): Promise<void> {
   const c = await db();
   const allowed = [
     "title", "clientName", "clientNif", "clientEmail", "clientPhone", "siteAddress",
@@ -519,22 +579,27 @@ export async function updateBudget(id: number, fields: Partial<Budget>): Promise
   const sets = keys.map((k) => `${k}=?`).join(", ");
   const values = keys.map((k) => fields[k] as string | number);
   await c.execute({
-    sql: `UPDATE budgets SET ${sets}, updatedAt=datetime('now') WHERE id=?`,
-    args: [...values, id],
+    sql: `UPDATE budgets SET ${sets}, updatedAt=datetime('now') WHERE id=? AND companyId=?`,
+    args: [...values, id, companyId],
   });
 }
 
-export async function deleteBudget(id: number): Promise<void> {
+export async function deleteBudget(companyId: number, id: number): Promise<void> {
   const c = await db();
   await c.batch(
     [
       {
         sql: `DELETE FROM budget_items WHERE chapterId IN
-              (SELECT id FROM budget_chapters WHERE budgetId=?)`,
-        args: [id],
+              (SELECT bc.id FROM budget_chapters bc JOIN budgets b ON b.id=bc.budgetId
+               WHERE bc.budgetId=? AND b.companyId=?)`,
+        args: [id, companyId],
       },
-      { sql: "DELETE FROM budget_chapters WHERE budgetId=?", args: [id] },
-      { sql: "DELETE FROM budgets WHERE id=?", args: [id] },
+      {
+        sql: `DELETE FROM budget_chapters WHERE budgetId IN
+              (SELECT id FROM budgets WHERE id=? AND companyId=?)`,
+        args: [id, companyId],
+      },
+      { sql: "DELETE FROM budgets WHERE id=? AND companyId=?", args: [id, companyId] },
     ],
     "write"
   );
@@ -547,7 +612,7 @@ async function touchBudget(c: DbClient, budgetId: number): Promise<void> {
   });
 }
 
-// ── Capítulos ─────────────────────────────────────────────────────────
+// ── Capítulos (scoped pelo budgetId; a ação verifica posse do orçamento) ──
 
 export async function addChapter(budgetId: number, name: string): Promise<number> {
   const c = await db();
@@ -555,83 +620,111 @@ export async function addChapter(budgetId: number, name: string): Promise<number
     sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_chapters WHERE budgetId=?",
     args: [budgetId],
   });
-  const p = Number((pr.rows[0] as Record<string, unknown>).p);
   const r = await c.execute({
     sql: "INSERT INTO budget_chapters (budgetId, name, position) VALUES (?,?,?)",
-    args: [budgetId, name, p],
+    args: [budgetId, name, scalar(pr, "p")],
   });
   await touchBudget(c, budgetId);
   return Number(r.lastInsertRowid);
 }
 
-export async function renameChapter(id: number, name: string): Promise<void> {
+export async function renameChapter(
+  budgetId: number,
+  chapterId: number,
+  name: string
+): Promise<void> {
   const c = await db();
-  await c.execute({ sql: "UPDATE budget_chapters SET name=? WHERE id=?", args: [name, id] });
+  await c.execute({
+    sql: "UPDATE budget_chapters SET name=? WHERE id=? AND budgetId=?",
+    args: [name, chapterId, budgetId],
+  });
 }
 
-export async function deleteChapter(id: number): Promise<void> {
+export async function deleteChapter(budgetId: number, chapterId: number): Promise<void> {
   const c = await db();
   await c.batch(
     [
-      { sql: "DELETE FROM budget_items WHERE chapterId=?", args: [id] },
-      { sql: "DELETE FROM budget_chapters WHERE id=?", args: [id] },
+      {
+        sql: `DELETE FROM budget_items WHERE chapterId IN
+              (SELECT id FROM budget_chapters WHERE id=? AND budgetId=?)`,
+        args: [chapterId, budgetId],
+      },
+      { sql: "DELETE FROM budget_chapters WHERE id=? AND budgetId=?", args: [chapterId, budgetId] },
     ],
     "write"
   );
 }
 
-// ── Itens ─────────────────────────────────────────────────────────────
+// ── Itens (scoped pelo budgetId via capítulo) ─────────────────────────
 
 export async function addItem(
+  budgetId: number,
   chapterId: number,
   item: Pick<BudgetItem, "articleId" | "name" | "unit" | "quantity" | "materialCost" | "laborHours">
 ): Promise<number> {
   const c = await db();
+  // o capítulo tem de pertencer ao orçamento indicado
+  const chk = await c.execute({
+    sql: "SELECT 1 AS ok FROM budget_chapters WHERE id=? AND budgetId=?",
+    args: [chapterId, budgetId],
+  });
+  if (chk.rows.length === 0) return 0;
   const pr = await c.execute({
     sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM budget_items WHERE chapterId=?",
     args: [chapterId],
   });
-  const p = Number((pr.rows[0] as Record<string, unknown>).p);
   const r = await c.execute({
     sql: "INSERT INTO budget_items (chapterId, articleId, name, unit, quantity, materialCost, laborHours, position) VALUES (?,?,?,?,?,?,?,?)",
     args: [
       chapterId, item.articleId, item.name, item.unit, item.quantity,
-      item.materialCost, item.laborHours, p,
+      item.materialCost, item.laborHours, scalar(pr, "p"),
     ],
   });
+  await touchBudget(c, budgetId);
   return Number(r.lastInsertRowid);
 }
 
+const ITEM_IN_BUDGET =
+  "chapterId IN (SELECT id FROM budget_chapters WHERE budgetId=?)";
+
 export async function updateItem(
+  budgetId: number,
   id: number,
   item: Pick<BudgetItem, "name" | "unit" | "quantity" | "materialCost" | "laborHours">
 ): Promise<void> {
   const c = await db();
   await c.execute({
-    sql: "UPDATE budget_items SET name=?, unit=?, quantity=?, materialCost=?, laborHours=? WHERE id=?",
-    args: [item.name, item.unit, item.quantity, item.materialCost, item.laborHours, id],
+    sql: `UPDATE budget_items SET name=?, unit=?, quantity=?, materialCost=?, laborHours=?
+          WHERE id=? AND ${ITEM_IN_BUDGET}`,
+    args: [item.name, item.unit, item.quantity, item.materialCost, item.laborHours, id, budgetId],
   });
 }
 
-export async function setItemMaterialIncluded(id: number, included: boolean): Promise<void> {
+export async function setItemMaterialIncluded(
+  budgetId: number,
+  id: number,
+  included: boolean
+): Promise<void> {
   const c = await db();
   await c.execute({
-    sql: "UPDATE budget_items SET materialIncluded=? WHERE id=?",
-    args: [included ? 1 : 0, id],
+    sql: `UPDATE budget_items SET materialIncluded=? WHERE id=? AND ${ITEM_IN_BUDGET}`,
+    args: [included ? 1 : 0, id, budgetId],
   });
 }
 
-export async function deleteItem(id: number): Promise<void> {
+export async function deleteItem(budgetId: number, id: number): Promise<void> {
   const c = await db();
-  await c.execute({ sql: "DELETE FROM budget_items WHERE id=?", args: [id] });
+  await c.execute({
+    sql: `DELETE FROM budget_items WHERE id=? AND ${ITEM_IN_BUDGET}`,
+    args: [id, budgetId],
+  });
 }
 
 // ── Utilizadores e sessões ────────────────────────────────────────────
 
 export async function countUsers(): Promise<number> {
   const c = await db();
-  const r = await c.execute("SELECT COUNT(*) AS n FROM users");
-  return Number((r.rows[0] as Record<string, unknown>).n);
+  return scalar(await c.execute("SELECT COUNT(*) AS n FROM users"), "n");
 }
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
@@ -644,10 +737,13 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
   );
 }
 
-export async function listUsers(): Promise<User[]> {
+export async function listUsers(companyId: number): Promise<User[]> {
   const c = await db();
   return rowsToObjects<User>(
-    await c.execute("SELECT * FROM users ORDER BY (role='owner') DESC, email")
+    await c.execute({
+      sql: "SELECT * FROM users WHERE companyId=? ORDER BY (role='owner') DESC, email",
+      args: [companyId],
+    })
   );
 }
 
@@ -666,26 +762,31 @@ export async function createUser(u: {
   return Number(r.lastInsertRowid);
 }
 
-export async function deleteUser(id: number): Promise<void> {
+export async function deleteUser(companyId: number, id: number): Promise<void> {
   const c = await db();
   await c.batch(
     [
-      { sql: "DELETE FROM sessions WHERE userId=?", args: [id] },
-      { sql: "DELETE FROM users WHERE id=?", args: [id] },
+      {
+        sql: "DELETE FROM sessions WHERE userId IN (SELECT id FROM users WHERE id=? AND companyId=?)",
+        args: [id, companyId],
+      },
+      { sql: "DELETE FROM users WHERE id=? AND companyId=?", args: [id, companyId] },
     ],
     "write"
   );
 }
 
+/** Cria sessão a expirar daqui a `days` dias (formato datetime do SQLite,
+ *  para comparar corretamente com datetime('now')). */
 export async function createSession(
   id: string,
   userId: number,
-  expiresAt: string
+  days: number
 ): Promise<void> {
   const c = await db();
   await c.execute({
-    sql: "INSERT INTO sessions (id, userId, expiresAt) VALUES (?,?,?)",
-    args: [id, userId, expiresAt],
+    sql: `INSERT INTO sessions (id, userId, expiresAt) VALUES (?,?, datetime('now', ?))`,
+    args: [id, userId, `+${Math.round(days)} days`],
   });
 }
 
