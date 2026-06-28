@@ -1,8 +1,12 @@
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { createClient as createWebClient } from "@libsql/client/web";
 import fs from "node:fs";
 import path from "node:path";
 import { SEED_ARTICLES, DEFAULT_CONDITIONS } from "./seed-data";
+
+// node:sqlite só é carregado quando se usa o ficheiro local (dev). Em produção
+// (Turso, via cliente web) nunca é tocado — evita depender da versão de Node do host.
+const requireCjs = createRequire(import.meta.url);
 import type {
   Article,
   Budget,
@@ -137,6 +141,7 @@ interface DbClient {
 
 /** Adaptador node:sqlite com a forma da API libSQL (para desenvolvimento local). */
 function makeLocalClient(file: string): DbClient {
+  const { DatabaseSync } = requireCjs("node:sqlite") as typeof import("node:sqlite");
   const sdb = new DatabaseSync(file);
   sdb.exec("PRAGMA foreign_keys = ON");
   sdb.exec("PRAGMA journal_mode = WAL");
