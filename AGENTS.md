@@ -40,7 +40,7 @@ identificadores de código em inglês.
 - BD criada e pré-carregada (seed) automaticamente no primeiro arranque. Sem
   migrações formais — schema + `migrate()` (ALTER if missing) em `src/lib/db.ts`.
 
-## Produção (Fases 1 e 2 concluídas)
+## Produção (Fases 1, 2 e 3 concluídas)
 
 - **Online em https://kably-production.up.railway.app** (Railway, deploy
   automático a cada push para `master`). Endereço fixo, sem depender de PC local.
@@ -53,9 +53,15 @@ identificadores de código em inglês.
   Equipa são owner-only (gate em `requireOwner`). `KABLY_PASSWORD` **já não é
   usada** (pode ser removida do Railway).
 - O túnel Cloudflare (`scripts/iniciar.ps1`) deixou de ser necessário.
-- **Próximo (Fase 3):** multi-empresa — `getCompany()` ainda devolve a 1.ª
-  empresa; falta escopar TODAS as queries ao `companyId` da sessão e o signup
-  criar empresa nova + seed. Só então abrir registo a outras empresas.
+- **Multi-empresa (Fase 3):** TODAS as queries de dados recebem `companyId`
+  (da sessão) e estão escopadas; mutações de capítulos/itens escopadas por
+  `budgetId` + guarda `budgetBelongsTo`. `/registo` cria empresa nova + base de
+  artigos + dono; `/login` é a entrada (link Criar conta); `/setup` só reclama a
+  empresa legada quando `users` está vazia. **Isolamento testado A vs B.**
+  - Empresa do Pedro: id 1, "Lousacabo…", dono `pedromag997@gmail.com` (com BOSCH).
+- **Próximo (Fase 4/5):** landing público + convites por email; recuperação de
+  password e envio de orçamentos por email (precisa de Resend); RGPD antes de
+  abrir a outras empresas a sério.
 
 ## Mapa do código
 
