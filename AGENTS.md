@@ -40,27 +40,34 @@ identificadores de código em inglês.
 - BD criada e pré-carregada (seed) automaticamente no primeiro arranque. Sem
   migrações formais — schema + `migrate()` (ALTER if missing) em `src/lib/db.ts`.
 
-## Produção (Fase 1 concluída)
+## Produção (Fases 1 e 2 concluídas)
 
 - **Online em https://kably-production.up.railway.app** (Railway, deploy
   automático a cada push para `master`). Endereço fixo, sem depender de PC local.
 - **Base de dados: Turso** (libSQL). Variáveis no Railway: `DATABASE_URL`,
-  `DATABASE_AUTH_TOKEN`, `KABLY_PASSWORD`. Sem variáveis → cai no ficheiro local.
+  `DATABASE_AUTH_TOKEN`. Sem `DATABASE_URL` → cai no ficheiro local.
 - `scripts/migrar-para-turso.mjs` fez a migração inicial (lê `.env.local`).
-- O túnel Cloudflare (`scripts/iniciar.ps1`) **deixou de ser necessário** para
-  acesso remoto — fica só como alternativa local.
-- **Próximo (Fase 2):** contas/login a sério (hoje ainda é a palavra-passe única
-  partilhada via `KABLY_PASSWORD`) e multi-empresa — antes de onboarding externo.
+- **Autenticação (Fase 2):** contas por utilizador (email + bcrypt), sessões na
+  BD (tabela `sessions`, cookie `kably_session` httpOnly, 30 dias). 1.ª conta
+  via `/setup` (só quando `users` vazia). Papéis `owner`/`member`: Custos e
+  Equipa são owner-only (gate em `requireOwner`). `KABLY_PASSWORD` **já não é
+  usada** (pode ser removida do Railway).
+- O túnel Cloudflare (`scripts/iniciar.ps1`) deixou de ser necessário.
+- **Próximo (Fase 3):** multi-empresa — `getCompany()` ainda devolve a 1.ª
+  empresa; falta escopar TODAS as queries ao `companyId` da sessão e o signup
+  criar empresa nova + seed. Só então abrir registo a outras empresas.
 
 ## Mapa do código
 
 | Caminho | Responsabilidade |
 |---|---|
-| `src/lib/db.ts` | Camada de dados **assíncrona** (libSQL). Dois drivers/mesma API: `node:sqlite` local (import preguiçoso via `createRequire`) + cliente web Turso. Schema, seed, `migrate()`, todas as queries. Deletes em cascata explícitos. |
+| `src/lib/db.ts` | Camada de dados **assíncrona** (libSQL). Dois drivers/mesma API: `node:sqlite` local (`await import` dinâmico) + cliente web Turso. Schema, seed, `migrate()`, queries de tudo (inc. `users`/`sessions`). Deletes em cascata explícitos. |
+| `src/lib/session.ts` | Auth por sessão: bcrypt, `startSession`/`getCurrentUser`/`requireUser`/`requireOwner`/`endSession`. Usado em páginas/ações (Node), NÃO no proxy (edge). |
 | `src/lib/calc.ts` | Fórmula de preços: `preço = mat×qtd×(1+margem_mat) + horas×€/h×qtd×(1+margem_MO)`; IVA; formatação pt-PT |
 | `src/lib/seed-data.ts` | ~75 artigos PT de referência + capítulos por defeito |
 | `src/lib/pdf.tsx` | PDF (versão **interna** com custos/margem, versão **cliente** só preços). Não usar Intl no PDF (espaços U+202F quebram WinAnsi) |
-| `src/lib/auth.ts` + `src/proxy.ts` | Autenticação por palavra-passe (cookie 1 ano). Ativa quando `KABLY_PASSWORD` está definida no `.env.local` |
+| `src/proxy.ts` | Gate grosseiro no edge: redireciona para `/login` se não houver cookie `kably_session` (validação real é server-side em `requireUser`) |
+| `src/app/setup/`, `src/app/login/`, `src/app/equipa/` | Criar 1.º dono; login email+password; gestão de equipa (owner-only) |
 | `src/app/actions.ts` | Todas as server actions |
 | `src/app/orcamentos/` | Lista, novo, editor (`src/components/BudgetEditor.tsx`), PDF (route handler) |
 | `src/app/artigos/`, `src/app/definicoes/` | Gestão de artigos; dados da empresa + logotipo (base64 na BD) |
