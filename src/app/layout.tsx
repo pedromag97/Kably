@@ -17,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Kably — Orçamentos de Eletricidade",
-  description: "Plataforma de orçamentação para obras de eletricidade",
+  description:
+    "Plataforma de orçamentação para obras de eletricidade: orçamentos rápidos, importação de MQT, e a tua taxa horária real.",
 };
 
 export const viewport: Viewport = {
@@ -32,7 +33,7 @@ export default async function RootLayout({
 }>) {
   const user = await getCurrentUser();
   const links = [
-    { href: "/", label: "Orçamentos" },
+    { href: "/orcamentos", label: "Orçamentos" },
     { href: "/artigos", label: "Artigos" },
     ...(user?.role === "owner"
       ? [
@@ -51,10 +52,13 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <header className="bg-slate-900 text-white sticky top-0 z-20 shadow">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold tracking-tight">
+            <Link
+              href={user ? "/orcamentos" : "/"}
+              className="text-xl font-bold tracking-tight"
+            >
               ⚡ Kably
             </Link>
-            {user && (
+            {user ? (
               <>
                 <nav className="flex gap-1 text-sm">
                   {links.map((l) => (
@@ -81,6 +85,21 @@ export default async function RootLayout({
                   </form>
                 </div>
               </>
+            ) : (
+              <div className="ml-auto flex items-center gap-2 text-sm">
+                <Link
+                  href="/login"
+                  className="px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
+                >
+                  Entrar
+                </Link>
+                <Link
+                  href="/registo"
+                  className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 font-medium"
+                >
+                  Criar conta
+                </Link>
+              </div>
             )}
           </div>
         </header>

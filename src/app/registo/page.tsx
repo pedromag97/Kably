@@ -38,7 +38,7 @@ async function registerAction(fd: FormData) {
     role: "owner",
   });
   await startSession(userId);
-  redirect("/");
+  redirect("/orcamentos");
 }
 
 const ERROS: Record<string, string> = {
@@ -51,7 +51,7 @@ export default async function RegisterPage({
 }: {
   searchParams: Promise<{ erro?: string }>;
 }) {
-  if (await getCurrentUser()) redirect("/");
+  if (await getCurrentUser()) redirect("/orcamentos");
   const { erro } = await searchParams;
   return (
     <div className="flex items-center justify-center min-h-[60vh]">

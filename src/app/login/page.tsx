@@ -17,7 +17,7 @@ async function loginAction(fd: FormData) {
     redirect("/login?erro=1");
   }
   await startSession(user.id);
-  redirect("/");
+  redirect("/orcamentos");
 }
 
 export default async function LoginPage({

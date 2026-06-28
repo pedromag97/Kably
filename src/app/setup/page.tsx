@@ -28,7 +28,7 @@ async function setupAction(fd: FormData) {
     role: "owner",
   });
   await startSession(id);
-  redirect("/");
+  redirect("/orcamentos");
 }
 
 export default async function SetupPage({

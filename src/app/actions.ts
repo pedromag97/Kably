@@ -45,7 +45,7 @@ export async function createBudgetAction(fd: FormData) {
     },
     DEFAULT_CHAPTERS
   );
-  revalidatePath("/");
+  revalidatePath("/orcamentos");
   redirect(`/orcamentos/${id}`);
 }
 
@@ -74,7 +74,7 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
 export async function deleteBudgetAction(budgetId: number) {
   const user = await requireUser();
   await store.deleteBudget(user.companyId, budgetId);
-  revalidatePath("/");
+  revalidatePath("/orcamentos");
 }
 
 // ── Capítulos ─────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
     }
   }
 
-  revalidatePath("/");
+  revalidatePath("/orcamentos");
   redirect(`/orcamentos/${budgetId}`);
 }
 

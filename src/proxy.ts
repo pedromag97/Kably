@@ -8,6 +8,8 @@ const PUBLIC_PREFIXES = ["/login", "/registo", "/setup", "/_next", "/favicon.ico
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Landing pública (a própria página reencaminha quem tem sessão para /orcamentos).
+  if (pathname === "/") return NextResponse.next();
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
