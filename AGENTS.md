@@ -90,6 +90,18 @@ identificadores de código em inglês.
   `/artigos/cotacao` (assistente 3 passos: fornecedor+data+ficheiro → mapa de
   colunas/revisão com auto-matching pela engine `matching.ts` → cria/associa
   artigos e regista preços). Tudo escopado por `companyId`.
+- **Clientes + Painel (gestão de negócio):** tabela `clients` (geridos em
+  `/clientes`, com import Excel/CSV e ficha `/clientes/[id]` com orçamentos,
+  totais ganho/pendente/conversão e notas). Orçamentos ganham `clientId` mas
+  **mantêm a cópia** dos dados do cliente (editar no orçamento não mexe na
+  ficha). Ao criar um orçamento, o cliente é auto-guardado e deduplicado por
+  **NIF→nome** (`findClientByNifOrName`). **Duplicar orçamento** (botão na lista
+  → `duplicateBudget`, cópia em rascunho). **Migração** `/clientes/migrar`: cria
+  fichas a partir de clientes escritos em orçamentos antigos (ecrã de revisão,
+  reaproveita fichas existentes). **`/painel`** é o destino pós-login: contagens
+  por estado + conversão, valores (pipeline/ganho/médio), lista de **follow-up**
+  (enviados sem resposta há > `companies.followUpDays` dias, configurável nas
+  Definições) e **validade expirada**, com selector mês/trimestre/ano/tudo.
 
 ## Mapa do código
 
@@ -109,6 +121,11 @@ identificadores de código em inglês.
 | `src/app/fornecedores/` + `SuppliersManager.tsx` | Lista de fornecedores (CRUD simples) |
 | `src/app/artigos/[id]/` + `ArticleDetail.tsx` | Detalhe do artigo: comparar fornecedores, adotar preço, histórico + sparkline, cotação manual |
 | `src/app/artigos/cotacao/` + `QuoteImporter.tsx` | Importar cotação de fornecedor (Excel → matching → `price_entries`) |
+| `src/app/painel/` | Destino pós-login: indicadores, conversão, follow-up, validade expirada (selector de período) |
+| `src/app/clientes/` + `ClientsManager.tsx`/`ClientImporter.tsx` | Lista de clientes (CRUD + import Excel/CSV) |
+| `src/app/clientes/[id]/` + `ClientDetail.tsx` | Ficha do cliente: orçamentos, totais, notas, novo orçamento |
+| `src/app/clientes/migrar/` + `ClientMigration.tsx` | Migração: cria fichas a partir de orçamentos antigos (dedup) |
+| `src/components/NewBudgetForm.tsx` | Form de novo orçamento com selecção/auto-guardar de cliente |
 | `src/lib/matching.ts` | Importação MQT: normalização PT, pontuação de semelhança, adivinha de colunas, mapa categoria→capítulo |
 | `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
 | `scripts/iniciar.ps1` | Arranca servidor + túnel Cloudflare e mostra URL pública |

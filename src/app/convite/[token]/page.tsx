@@ -26,7 +26,7 @@ async function acceptAction(fd: FormData) {
   });
   await deleteInvite(token);
   await startSession(userId);
-  redirect("/orcamentos");
+  redirect("/painel");
 }
 
 export default async function InvitePage({

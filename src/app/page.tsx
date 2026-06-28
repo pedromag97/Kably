@@ -119,7 +119,7 @@ function BudgetMock() {
 }
 
 export default async function LandingPage() {
-  if (await getCurrentUser()) redirect("/orcamentos");
+  if (await getCurrentUser()) redirect("/painel");
 
   return (
     <div className="grid gap-24 py-6">

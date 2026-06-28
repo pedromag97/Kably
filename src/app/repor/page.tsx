@@ -19,7 +19,7 @@ async function resetAction(fd: FormData) {
   await updateUserPassword(userId, await hashPassword(password));
   await deletePasswordReset(token);
   await startSession(userId);
-  redirect("/orcamentos");
+  redirect("/painel");
 }
 
 export default async function ResetPage({

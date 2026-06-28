@@ -28,7 +28,7 @@ async function setupAction(fd: FormData) {
     role: "owner",
   });
   await startSession(id);
-  redirect("/orcamentos");
+  redirect("/painel");
 }
 
 export default async function SetupPage({

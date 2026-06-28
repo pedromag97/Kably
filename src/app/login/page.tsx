@@ -21,7 +21,7 @@ async function loginAction(fd: FormData) {
     redirect("/login?erro=1");
   }
   await startSession(user.id);
-  redirect("/orcamentos");
+  redirect("/painel");
 }
 
 export default async function LoginPage({

@@ -12,6 +12,19 @@ export type Company = {
   validityDays: number;
   conditions: string;
   targetProfitPct: number; // lucro-alvo usado na página de custos
+  followUpDays: number; // dias sem resposta antes de sinalizar follow-up
+};
+
+export type Client = {
+  id: number;
+  companyId: number;
+  name: string;
+  nif: string;
+  email: string;
+  phone: string;
+  address: string;
+  notes: string;
+  createdAt: string;
 };
 
 export type Supplier = { id: number; companyId: number; name: string };
@@ -58,6 +71,7 @@ export type Budget = {
   companyId: number;
   number: string;
   title: string;
+  clientId: number | null;
   clientName: string;
   clientNif: string;
   clientEmail: string;

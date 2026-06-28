@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listBudgets, getBudget } from "@/lib/db";
 import { budgetTotals, eur, VAT_MODES } from "@/lib/calc";
-import { deleteBudgetAction } from "@/app/actions";
+import { deleteBudgetAction, duplicateBudgetAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +80,20 @@ export default async function BudgetsPage() {
                   <div className="font-bold">{eur(t.total)}</div>
                   <div className="text-xs text-slate-500">c/ IVA</div>
                 </div>
+                <form
+                  action={async () => {
+                    "use server";
+                    await duplicateBudgetAction(b.id);
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="text-slate-400 hover:text-blue-600 px-2 py-1 text-sm"
+                    title="Duplicar orçamento"
+                  >
+                    ⧉
+                  </button>
+                </form>
                 <form
                   action={async () => {
                     "use server";

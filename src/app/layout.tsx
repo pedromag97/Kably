@@ -33,7 +33,9 @@ export default async function RootLayout({
 }>) {
   const user = await getCurrentUser();
   const links = [
+    { href: "/painel", label: "Painel" },
     { href: "/orcamentos", label: "Orçamentos" },
+    { href: "/clientes", label: "Clientes" },
     { href: "/artigos", label: "Artigos" },
     { href: "/fornecedores", label: "Fornecedores" },
     ...(user?.role === "owner"
@@ -54,7 +56,7 @@ export default async function RootLayout({
         <header className="bg-slate-900 text-white sticky top-0 z-20 shadow">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
             <Link
-              href={user ? "/orcamentos" : "/"}
+              href={user ? "/painel" : "/"}
               className="text-xl font-bold tracking-tight"
             >
               ⚡ Kably

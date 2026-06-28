@@ -44,12 +44,34 @@ async function ownedBudget(budgetId: number): Promise<number | null> {
 
 // ── Orçamentos ────────────────────────────────────────────────────────
 
+/** Resolve o clientId de um formulário de orçamento: usa o escolhido, ou
+ *  auto-guarda um cliente novo a partir dos campos (deduplicado por NIF→nome). */
+async function resolveClientId(companyId: number, fd: FormData): Promise<number | null> {
+  const picked = Math.round(flt(fd, "clientId", 0));
+  if (picked > 0) return picked;
+  const name = str(fd, "clientName");
+  if (!name) return null;
+  const nif = str(fd, "clientNif");
+  const existing = await store.findClientByNifOrName(companyId, nif, name);
+  if (existing) return existing.id;
+  return store.createClient(companyId, {
+    name,
+    nif,
+    email: str(fd, "clientEmail"),
+    phone: str(fd, "clientPhone"),
+    address: str(fd, "siteAddress"),
+    notes: "",
+  });
+}
+
 export async function createBudgetAction(fd: FormData) {
   const user = await requireUser();
+  const clientId = await resolveClientId(user.companyId, fd);
   const id = await store.createBudget(
     user.companyId,
     {
       title: str(fd, "title") || "Instalação elétrica",
+      clientId,
       clientName: str(fd, "clientName"),
       clientNif: str(fd, "clientNif"),
       clientEmail: str(fd, "clientEmail"),
@@ -61,6 +83,13 @@ export async function createBudgetAction(fd: FormData) {
   );
   revalidatePath("/orcamentos");
   redirect(`/orcamentos/${id}`);
+}
+
+export async function duplicateBudgetAction(budgetId: number) {
+  const user = await requireUser();
+  const newId = await store.duplicateBudget(user.companyId, budgetId);
+  revalidatePath("/orcamentos");
+  if (newId) redirect(`/orcamentos/${newId}`);
 }
 
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
@@ -532,6 +561,125 @@ export async function saveCompanyAction(fd: FormData) {
     laborRate: flt(fd, "laborRate", 20),
     validityDays: Math.round(flt(fd, "validityDays", 30)),
     conditions: String(fd.get("conditions") ?? ""),
+    followUpDays: Math.round(flt(fd, "followUpDays", 5)),
   });
   revalidatePath("/definicoes");
+  revalidatePath("/painel");
+}
+
+// ── Clientes ──────────────────────────────────────────────────────────
+
+function clientFromForm(fd: FormData) {
+  return {
+    name: str(fd, "name") || "Cliente",
+    nif: str(fd, "nif"),
+    email: str(fd, "email"),
+    phone: str(fd, "phone"),
+    address: str(fd, "address"),
+    notes: String(fd.get("notes") ?? ""),
+  };
+}
+
+export async function createClientAction(fd: FormData) {
+  const user = await requireUser();
+  await store.createClient(user.companyId, clientFromForm(fd));
+  revalidatePath("/clientes");
+}
+
+export async function updateClientAction(clientId: number, fd: FormData) {
+  const user = await requireUser();
+  await store.updateClient(user.companyId, clientId, clientFromForm(fd));
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clientId}`);
+}
+
+export async function deleteClientAction(clientId: number) {
+  const user = await requireUser();
+  await store.deleteClient(user.companyId, clientId);
+  revalidatePath("/clientes");
+}
+
+export type ClientImportRow = {
+  name: string;
+  nif: string;
+  email: string;
+  phone: string;
+  address: string;
+};
+
+/** Importa clientes (Excel/CSV), deduplicados por NIF→nome. Devolve contagens. */
+export async function importClientsAction(
+  rows: ClientImportRow[]
+): Promise<{ created: number; skipped: number }> {
+  const user = await requireUser();
+  let created = 0;
+  let skipped = 0;
+  for (const row of rows) {
+    const name = (row.name || "").trim();
+    if (!name) {
+      skipped++;
+      continue;
+    }
+    const existing = await store.findClientByNifOrName(user.companyId, row.nif || "", name);
+    if (existing) {
+      skipped++;
+      continue;
+    }
+    await store.createClient(user.companyId, {
+      name,
+      nif: (row.nif || "").trim(),
+      email: (row.email || "").trim(),
+      phone: (row.phone || "").trim(),
+      address: (row.address || "").trim(),
+      notes: "",
+    });
+    created++;
+  }
+  revalidatePath("/clientes");
+  return { created, skipped };
+}
+
+export type MigrationCandidate = {
+  name: string;
+  nif: string;
+  email: string;
+  phone: string;
+  address: string;
+  budgetIds: number[];
+};
+
+/** Migração: cria (ou reaproveita) a ficha de cada candidato confirmado e liga
+ *  os orçamentos correspondentes (clientId). */
+export async function applyClientMigrationAction(
+  candidates: MigrationCandidate[]
+): Promise<{ clients: number; linked: number }> {
+  const user = await requireUser();
+  let clients = 0;
+  let linked = 0;
+  for (const cand of candidates) {
+    const name = (cand.name || "").trim();
+    if (!name) continue;
+    const existing = await store.findClientByNifOrName(user.companyId, cand.nif || "", name);
+    let clientId: number;
+    if (existing) {
+      clientId = existing.id;
+    } else {
+      clientId = await store.createClient(user.companyId, {
+        name,
+        nif: (cand.nif || "").trim(),
+        email: (cand.email || "").trim(),
+        phone: (cand.phone || "").trim(),
+        address: (cand.address || "").trim(),
+        notes: "",
+      });
+      clients++;
+    }
+    for (const bId of cand.budgetIds) {
+      await store.updateBudget(user.companyId, bId, { clientId });
+      linked++;
+    }
+  }
+  revalidatePath("/clientes");
+  revalidatePath("/orcamentos");
+  return { clients, linked };
 }

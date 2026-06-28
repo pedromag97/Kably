@@ -132,6 +132,15 @@ export default function CompanySettings({ company }: { company: Company }) {
           />
         </label>
         <label className="grid gap-1 font-medium col-span-2">
+          Follow-up: dias sem resposta antes de sinalizar no painel
+          <input
+            name="followUpDays"
+            inputMode="numeric"
+            defaultValue={company.followUpDays ?? 5}
+            className={inputCls}
+          />
+        </label>
+        <label className="grid gap-1 font-medium col-span-2">
           Condições (aparecem no PDF)
           <textarea
             name="conditions"

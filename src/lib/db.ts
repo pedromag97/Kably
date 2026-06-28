@@ -8,6 +8,7 @@ import type {
   BudgetFull,
   BudgetItem,
   BudgetChapter,
+  Client,
   Company,
   Expense,
   PriceEntry,
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS companies (
   laborMargin REAL NOT NULL DEFAULT 35,
   laborRate REAL NOT NULL DEFAULT 20,
   validityDays INTEGER NOT NULL DEFAULT 30,
-  conditions TEXT NOT NULL DEFAULT ''
+  conditions TEXT NOT NULL DEFAULT '',
+  followUpDays INTEGER NOT NULL DEFAULT 5
 );
 CREATE TABLE IF NOT EXISTS articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +49,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   number TEXT NOT NULL,
   title TEXT NOT NULL,
+  clientId INTEGER REFERENCES clients(id) ON DELETE SET NULL,
   clientName TEXT NOT NULL DEFAULT '',
   clientNif TEXT NOT NULL DEFAULT '',
   clientEmail TEXT NOT NULL DEFAULT '',
@@ -155,6 +158,17 @@ CREATE TABLE IF NOT EXISTS price_entries (
   supplierName TEXT NOT NULL DEFAULT '',
   price REAL NOT NULL DEFAULT 0,
   date TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS clients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  nif TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
@@ -272,6 +286,9 @@ async function migrate(c: DbClient) {
   await addColumn("budgets", "status", "status TEXT NOT NULL DEFAULT 'DRAFT'");
   await addColumn("budgets", "sentAt", "sentAt TEXT");
   await addColumn("budgets", "decidedAt", "decidedAt TEXT");
+  // Clientes + follow-up (gestão de clientes e painel)
+  await addColumn("budgets", "clientId", "clientId INTEGER");
+  await addColumn("companies", "followUpDays", "followUpDays INTEGER NOT NULL DEFAULT 5");
 }
 
 // ── Mapeamento de linhas → objetos simples ────────────────────────────
@@ -339,11 +356,12 @@ export async function saveCompany(
   const c = await db();
   await c.execute({
     sql: `UPDATE companies SET name=?, nif=?, email=?, phone=?, address=?, logo=?,
-       materialMargin=?, laborMargin=?, laborRate=?, validityDays=?, conditions=? WHERE id=?`,
+       materialMargin=?, laborMargin=?, laborRate=?, validityDays=?, conditions=?,
+       followUpDays=? WHERE id=?`,
     args: [
       data.name, data.nif, data.email, data.phone, data.address, data.logo,
       data.materialMargin, data.laborMargin, data.laborRate, data.validityDays,
-      data.conditions, companyId,
+      data.conditions, Math.max(1, Math.round(data.followUpDays || 5)), companyId,
     ],
   });
 }
@@ -568,19 +586,19 @@ export async function createBudget(
     Budget,
     | "title" | "clientName" | "clientNif" | "clientEmail" | "clientPhone"
     | "siteAddress" | "vatMode"
-  >,
+  > & { clientId?: number | null },
   chapterNames: string[]
 ): Promise<number> {
   const c = await db();
   const company = await getCompany(companyId);
   const number = await nextBudgetNumber(c, companyId);
   const r = await c.execute({
-    sql: `INSERT INTO budgets (companyId, number, title, clientName, clientNif, clientEmail,
+    sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif, clientEmail,
        clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate, validityDays)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     args: [
-      companyId, number, data.title, data.clientName, data.clientNif, data.clientEmail,
-      data.clientPhone, data.siteAddress, data.vatMode, company.materialMargin,
+      companyId, number, data.title, data.clientId ?? null, data.clientName, data.clientNif,
+      data.clientEmail, data.clientPhone, data.siteAddress, data.vatMode, company.materialMargin,
       company.laborMargin, company.laborRate, company.validityDays,
     ],
   });
@@ -604,7 +622,7 @@ export async function updateBudget(
 ): Promise<void> {
   const c = await db();
   const allowed = [
-    "title", "clientName", "clientNif", "clientEmail", "clientPhone", "siteAddress",
+    "title", "clientId", "clientName", "clientNif", "clientEmail", "clientPhone", "siteAddress",
     "vatMode", "materialMargin", "laborMargin", "laborRate", "validityDays",
     "laborOnly", "materialFeePct", "notes",
   ] as const;
@@ -1025,19 +1043,21 @@ export async function revokeInvite(companyId: number, token: string): Promise<vo
 // ── Exportar / apagar empresa (RGPD) ──────────────────────────────────
 
 export async function exportCompanyData(companyId: number): Promise<unknown> {
-  const [company, articles, budgetList, workers, expenses, users] = await Promise.all([
+  const [company, articles, budgetList, workers, expenses, users, clients] = await Promise.all([
     getCompany(companyId),
     listArticles(companyId),
     listBudgets(companyId),
     listWorkers(companyId),
     listExpenses(companyId),
     listUsers(companyId),
+    listClients(companyId),
   ]);
   const budgets = await Promise.all(budgetList.map((b) => getBudget(companyId, b.id)));
   return {
     exportadoEm: new Date().toISOString(),
     empresa: company,
     utilizadores: users.map(({ passwordHash, ...u }) => u),
+    clientes: clients,
     artigos: articles,
     orcamentos: budgets,
     trabalhadores: workers,
@@ -1058,6 +1078,7 @@ export async function deleteCompany(companyId: number): Promise<void> {
       },
       { sql: "DELETE FROM budget_chapters WHERE budgetId IN (SELECT id FROM budgets WHERE companyId=?)", args: a },
       { sql: "DELETE FROM budgets WHERE companyId=?", args: a },
+      { sql: "DELETE FROM clients WHERE companyId=?", args: a },
       { sql: "DELETE FROM price_entries WHERE companyId=?", args: a },
       { sql: "DELETE FROM suppliers WHERE companyId=?", args: a },
       { sql: "DELETE FROM mqt_aliases WHERE companyId=?", args: a },
@@ -1152,4 +1173,185 @@ export async function setArticleCost(
     sql: "UPDATE articles SET materialCost=? WHERE id=? AND companyId=?",
     args: [materialCost, articleId, companyId],
   });
+}
+
+// ── Clientes ──────────────────────────────────────────────────────────
+
+export async function listClients(companyId: number): Promise<Client[]> {
+  const c = await db();
+  return rowsToObjects<Client>(
+    await c.execute({
+      sql: "SELECT * FROM clients WHERE companyId=? ORDER BY name COLLATE NOCASE",
+      args: [companyId],
+    })
+  );
+}
+
+export async function getClient(companyId: number, id: number): Promise<Client | undefined> {
+  const c = await db();
+  return firstRow<Client>(
+    await c.execute({ sql: "SELECT * FROM clients WHERE id=? AND companyId=?", args: [id, companyId] })
+  );
+}
+
+export type ClientInput = Pick<Client, "name" | "nif" | "email" | "phone" | "address" | "notes">;
+
+export async function createClient(companyId: number, data: ClientInput): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO clients (companyId, name, nif, email, phone, address, notes) VALUES (?,?,?,?,?,?,?)",
+    args: [companyId, data.name, data.nif, data.email, data.phone, data.address, data.notes],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function updateClient(
+  companyId: number,
+  id: number,
+  data: ClientInput
+): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE clients SET name=?, nif=?, email=?, phone=?, address=?, notes=? WHERE id=? AND companyId=?",
+    args: [data.name, data.nif, data.email, data.phone, data.address, data.notes, id, companyId],
+  });
+}
+
+/** Apaga o cliente; os orçamentos ficam (clientId passa a NULL, guardam a cópia dos dados). */
+export async function deleteClient(companyId: number, id: number): Promise<void> {
+  const c = await db();
+  await c.batch(
+    [
+      { sql: "UPDATE budgets SET clientId=NULL WHERE clientId=? AND companyId=?", args: [id, companyId] },
+      { sql: "DELETE FROM clients WHERE id=? AND companyId=?", args: [id, companyId] },
+    ],
+    "write"
+  );
+}
+
+/** Procura um cliente existente por NIF (se houver) e, em alternativa, por nome.
+ *  Usado na deduplicação da migração e do import. */
+export async function findClientByNifOrName(
+  companyId: number,
+  nif: string,
+  name: string
+): Promise<Client | undefined> {
+  const c = await db();
+  const cleanNif = nif.trim();
+  if (cleanNif) {
+    const byNif = firstRow<Client>(
+      await c.execute({
+        sql: "SELECT * FROM clients WHERE companyId=? AND nif<>'' AND nif=? LIMIT 1",
+        args: [companyId, cleanNif],
+      })
+    );
+    if (byNif) return byNif;
+  }
+  const cleanName = name.trim();
+  if (!cleanName) return undefined;
+  return firstRow<Client>(
+    await c.execute({
+      sql: "SELECT * FROM clients WHERE companyId=? AND name=? COLLATE NOCASE LIMIT 1",
+      args: [companyId, cleanName],
+    })
+  );
+}
+
+/** Orçamentos de um cliente (ligados por clientId). */
+export async function listBudgetsForClient(
+  companyId: number,
+  clientId: number
+): Promise<Budget[]> {
+  const c = await db();
+  return rowsToObjects<Budget>(
+    await c.execute({
+      sql: "SELECT * FROM budgets WHERE companyId=? AND clientId=? ORDER BY id DESC",
+      args: [companyId, clientId],
+    })
+  );
+}
+
+// ── Duplicar orçamento ────────────────────────────────────────────────
+
+/** Cria uma cópia em rascunho de um orçamento (novo número, sem link/estado/datas). */
+export async function duplicateBudget(
+  companyId: number,
+  budgetId: number
+): Promise<number | null> {
+  const src = await getBudget(companyId, budgetId);
+  if (!src) return null;
+  const c = await db();
+  const number = await nextBudgetNumber(c, companyId);
+  const r = await c.execute({
+    sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif,
+       clientEmail, clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate,
+       validityDays, laborOnly, materialFeePct, notes)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      companyId, number, `${src.title} (cópia)`, src.clientId ?? null, src.clientName,
+      src.clientNif, src.clientEmail, src.clientPhone, src.siteAddress, src.vatMode,
+      src.materialMargin, src.laborMargin, src.laborRate, src.validityDays, src.laborOnly,
+      src.materialFeePct, src.notes,
+    ],
+  });
+  const newId = Number(r.lastInsertRowid);
+  for (const ch of src.chapters) {
+    const chId = await addChapter(newId, ch.name);
+    if (ch.items.length > 0) {
+      await c.batch(
+        ch.items.map((it, i) => ({
+          sql: "INSERT INTO budget_items (chapterId, articleId, name, unit, quantity, materialCost, laborHours, materialIncluded, position) VALUES (?,?,?,?,?,?,?,?,?)",
+          args: [chId, it.articleId, it.name, it.unit, it.quantity, it.materialCost, it.laborHours, it.materialIncluded, i],
+        })),
+        "write"
+      );
+    }
+  }
+  return newId;
+}
+
+// ── Painel: orçamentos completos para cálculo de valores ──────────────
+
+/** Todos os orçamentos da empresa com capítulos+itens (para somar valores no painel). */
+export async function listBudgetsFull(companyId: number): Promise<BudgetFull[]> {
+  const c = await db();
+  const budgets = rowsToObjects<Budget>(
+    await c.execute({ sql: "SELECT * FROM budgets WHERE companyId=? ORDER BY id DESC", args: [companyId] })
+  );
+  if (budgets.length === 0) return [];
+  const chapters = rowsToObjects<BudgetChapter>(
+    await c.execute({
+      sql: `SELECT bc.* FROM budget_chapters bc JOIN budgets b ON b.id=bc.budgetId
+            WHERE b.companyId=? ORDER BY bc.position, bc.id`,
+      args: [companyId],
+    })
+  );
+  const items = rowsToObjects<BudgetItem>(
+    await c.execute({
+      sql: `SELECT bi.* FROM budget_items bi
+            JOIN budget_chapters bc ON bc.id=bi.chapterId
+            JOIN budgets b ON b.id=bc.budgetId
+            WHERE b.companyId=? ORDER BY bi.position, bi.id`,
+      args: [companyId],
+    })
+  );
+  const chaptersByBudget = new Map<number, BudgetChapter[]>();
+  for (const ch of chapters) {
+    const arr = chaptersByBudget.get(ch.budgetId) ?? [];
+    arr.push(ch);
+    chaptersByBudget.set(ch.budgetId, arr);
+  }
+  const itemsByChapter = new Map<number, BudgetItem[]>();
+  for (const it of items) {
+    const arr = itemsByChapter.get(it.chapterId) ?? [];
+    arr.push(it);
+    itemsByChapter.set(it.chapterId, arr);
+  }
+  return budgets.map((b) => ({
+    ...b,
+    chapters: (chaptersByBudget.get(b.id) ?? []).map((ch) => ({
+      ...ch,
+      items: itemsByChapter.get(ch.id) ?? [],
+    })),
+  }));
 }
