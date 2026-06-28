@@ -63,8 +63,16 @@ identificadores de código em inglês.
   preços dos planos Grátis/Pro 14,90€/Equipas 29,90€) — quem tem sessão é
   reencaminhado para `/orcamentos`. A app vive em `/orcamentos` (a lista mudou de
   `/`). Planos são só informativos (beta tudo desbloqueado); pagamentos a definir.
-- **Próximo (Fase 5):** email (Resend) — recuperação de password e envio de
-  orçamentos ao cliente; depois convites de equipa por email e RGPD (Fase 6).
+- **Email (Fase 5):** `src/lib/email.ts` envia via Resend; **sem `RESEND_API_KEY`
+  regista na consola (não entrega)**. Recuperação de password (`/recuperar`,
+  `/repor`, tabela `password_resets`). Envio de orçamento (modal no editor):
+  email com PDF anexado + link, WhatsApp, copiar link. Vista pública
+  `/p/[token]` (preços cliente) + `/p/[token]/pdf`; cliente aceita/recusa →
+  notifica o dono. Estado em `budgets.status` (DRAFT/SENT/ACCEPTED/REJECTED).
+  - **Falta para entrega real:** `RESEND_API_KEY` no Railway; e domínio verificado
+    (`EMAIL_FROM`) para enviar a clientes (sem isso, Resend só envia para o dono).
+- **Próximo (Fase 6):** convites de equipa por email, RGPD (política/exportar/
+  apagar dados), rate-limiting e monitorização antes de abrir a outras empresas.
 
 ## Mapa do código
 
