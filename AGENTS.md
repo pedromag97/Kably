@@ -37,15 +37,26 @@ identificadores de código em inglês.
     são **explícitos** (batch) para o comportamento ser idêntico local e remoto.
 - **@react-pdf/renderer** para PDFs no servidor (está em
   `serverExternalPackages` no next.config.ts).
-- BD criada e pré-carregada automaticamente no primeiro arranque em
-  `data/kably.db` (gitignored). Sem migrações formais — schema em
-  `src/lib/db.ts` (CREATE TABLE IF NOT EXISTS).
+- BD criada e pré-carregada (seed) automaticamente no primeiro arranque. Sem
+  migrações formais — schema + `migrate()` (ALTER if missing) em `src/lib/db.ts`.
+
+## Produção (Fase 1 concluída)
+
+- **Online em https://kably-production.up.railway.app** (Railway, deploy
+  automático a cada push para `master`). Endereço fixo, sem depender de PC local.
+- **Base de dados: Turso** (libSQL). Variáveis no Railway: `DATABASE_URL`,
+  `DATABASE_AUTH_TOKEN`, `KABLY_PASSWORD`. Sem variáveis → cai no ficheiro local.
+- `scripts/migrar-para-turso.mjs` fez a migração inicial (lê `.env.local`).
+- O túnel Cloudflare (`scripts/iniciar.ps1`) **deixou de ser necessário** para
+  acesso remoto — fica só como alternativa local.
+- **Próximo (Fase 2):** contas/login a sério (hoje ainda é a palavra-passe única
+  partilhada via `KABLY_PASSWORD`) e multi-empresa — antes de onboarding externo.
 
 ## Mapa do código
 
 | Caminho | Responsabilidade |
 |---|---|
-| `src/lib/db.ts` | Schema SQLite, seed, todas as queries (normalizar linhas com `plain()` — node:sqlite devolve objetos com protótipo nulo que o RSC rejeita) |
+| `src/lib/db.ts` | Camada de dados **assíncrona** (libSQL). Dois drivers/mesma API: `node:sqlite` local (import preguiçoso via `createRequire`) + cliente web Turso. Schema, seed, `migrate()`, todas as queries. Deletes em cascata explícitos. |
 | `src/lib/calc.ts` | Fórmula de preços: `preço = mat×qtd×(1+margem_mat) + horas×€/h×qtd×(1+margem_MO)`; IVA; formatação pt-PT |
 | `src/lib/seed-data.ts` | ~75 artigos PT de referência + capítulos por defeito |
 | `src/lib/pdf.tsx` | PDF (versão **interna** com custos/margem, versão **cliente** só preços). Não usar Intl no PDF (espaços U+202F quebram WinAnsi) |
