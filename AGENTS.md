@@ -71,8 +71,15 @@ identificadores de código em inglês.
   notifica o dono. Estado em `budgets.status` (DRAFT/SENT/ACCEPTED/REJECTED).
   - **Falta para entrega real:** `RESEND_API_KEY` no Railway; e domínio verificado
     (`EMAIL_FROM`) para enviar a clientes (sem isso, Resend só envia para o dono).
-- **Próximo (Fase 6):** convites de equipa por email, RGPD (política/exportar/
-  apagar dados), rate-limiting e monitorização antes de abrir a outras empresas.
+- **Fase 6 (pré-lançamento):** convites de equipa por email (`/convite/[token]`,
+  membro define a própria password); legal `/privacidade` + `/termos` (RGPD, com
+  `[campos]` por preencher) + rodapé; exportar dados (`/definicoes/exportar`, JSON)
+  e apagar empresa (zona de perigo, `deleteCompany` cascata); rate-limiting
+  (`src/lib/rate-limit.ts`) no login/recuperação; monitorização
+  (`src/instrumentation.ts` → `src/lib/monitoring.ts`, Sentry via `SENTRY_DSN`).
+- **Falta para lançamento real:** preencher os `[campos]` legais; `RESEND_API_KEY`
+  (entrega de emails) + domínio verificado (`EMAIL_FROM`); opcional `SENTRY_DSN`;
+  e, quando quiser cobrar, faturação (Stripe) — a base (planos na landing) está pronta.
 
 ## Mapa do código
 
