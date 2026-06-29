@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/session";
-import { logoutAction } from "./actions";
+import HeaderNav from "@/components/HeaderNav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,40 +54,15 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <header className="bg-slate-900 text-white sticky top-0 z-20 shadow">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
+          <div className="relative mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
             <Link
               href={user ? "/painel" : "/"}
-              className="text-xl font-bold tracking-tight"
+              className="text-xl font-bold tracking-tight shrink-0"
             >
               ⚡ Kably
             </Link>
             {user ? (
-              <>
-                <nav className="flex gap-1 text-sm">
-                  {links.map((l) => (
-                    <Link
-                      key={l.href}
-                      href={l.href}
-                      className="px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
-                    >
-                      {l.label}
-                    </Link>
-                  ))}
-                </nav>
-                <div className="ml-auto flex items-center gap-3 text-sm">
-                  <span className="text-slate-300 hidden sm:inline">
-                    {user.name || user.email}
-                  </span>
-                  <form action={logoutAction}>
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600"
-                    >
-                      Sair
-                    </button>
-                  </form>
-                </div>
-              </>
+              <HeaderNav links={links} userLabel={user.name || user.email} />
             ) : (
               <div className="ml-auto flex items-center gap-2 text-sm">
                 <Link

@@ -122,7 +122,7 @@ export default async function LandingPage() {
   if (await getCurrentUser()) redirect("/painel");
 
   return (
-    <div className="grid gap-24 py-6">
+    <div className="grid gap-16 sm:gap-24 py-6">
       {/* Hero */}
       <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white px-6 py-14 sm:px-12 sm:py-16">
         <div className="absolute -top-32 -right-20 w-96 h-96 bg-blue-600/30 rounded-full blur-3xl" />

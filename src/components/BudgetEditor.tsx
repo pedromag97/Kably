@@ -490,7 +490,8 @@ export default function BudgetEditor({
                 </div>
 
                 {ch.items.length > 0 && (
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-sm">
                     <thead>
                       <tr className="text-xs text-slate-400 text-left">
                         <th className="px-3 pt-2 font-medium">Designação</th>
@@ -509,6 +510,7 @@ export default function BudgetEditor({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
 
                 <div className="flex gap-2 p-2.5">
