@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getBudget, listActualCosts } from "@/lib/db";
+import { getBudget, listActualCosts, listBillingPhases } from "@/lib/db";
 import { budgetTotals } from "@/lib/calc";
 import ObraDetail from "@/components/ObraDetail";
 import { requireUser } from "@/lib/session";
@@ -19,9 +19,17 @@ export default async function ObraPage({
   const user = await requireUser();
   const budget = await getBudget(user.companyId, budgetId);
   if (!budget) notFound();
-  const costs = await listActualCosts(user.companyId, budgetId);
+  const [costs, phases] = await Promise.all([
+    listActualCosts(user.companyId, budgetId),
+    listBillingPhases(user.companyId, budgetId),
+  ]);
 
   const bt = budgetTotals(budget);
+  const totalCIva = bt.total;
+  const phasesWithValue = phases.map((p) => ({
+    ...p,
+    value: p.mode === "FIXED" ? p.amount : Math.round(totalCIva * (p.pct / 100) * 100) / 100,
+  }));
   const sum = (cat: string) =>
     costs.filter((c) => c.category === cat).reduce((s, c) => s + c.amount, 0);
   const materialReal = sum("MATERIAL");
@@ -52,6 +60,8 @@ export default async function ObraPage({
         budget={{ id: budget.id, number: budget.number, title: budget.title, status: budget.status }}
         totals={totals}
         costs={costs}
+        phases={phasesWithValue}
+        totalCIva={totalCIva}
       />
     </div>
   );

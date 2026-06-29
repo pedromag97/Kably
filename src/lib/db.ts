@@ -5,6 +5,7 @@ import { SEED_ARTICLES, DEFAULT_CONDITIONS } from "./seed-data";
 import type {
   ActualCost,
   Article,
+  BillingPhase,
   Budget,
   BudgetFull,
   BudgetItem,
@@ -182,6 +183,21 @@ CREATE TABLE IF NOT EXISTS actual_costs (
   description TEXT NOT NULL DEFAULT '',
   amount REAL NOT NULL DEFAULT 0,
   hours REAL NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS billing_phases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  budgetId INTEGER NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL DEFAULT 'PCT',
+  pct REAL NOT NULL DEFAULT 0,
+  amount REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  invoiceRef TEXT NOT NULL DEFAULT '',
+  invoicedAt TEXT,
+  paidAt TEXT,
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
@@ -666,6 +682,7 @@ export async function deleteBudget(companyId: number, id: number): Promise<void>
         args: [id, companyId],
       },
       { sql: "DELETE FROM actual_costs WHERE budgetId=? AND companyId=?", args: [id, companyId] },
+      { sql: "DELETE FROM billing_phases WHERE budgetId=? AND companyId=?", args: [id, companyId] },
       { sql: "DELETE FROM budgets WHERE id=? AND companyId=?", args: [id, companyId] },
     ],
     "write"
@@ -1093,6 +1110,7 @@ export async function deleteCompany(companyId: number): Promise<void> {
       },
       { sql: "DELETE FROM budget_chapters WHERE budgetId IN (SELECT id FROM budgets WHERE companyId=?)", args: a },
       { sql: "DELETE FROM actual_costs WHERE companyId=?", args: a },
+      { sql: "DELETE FROM billing_phases WHERE companyId=?", args: a },
       { sql: "DELETE FROM budgets WHERE companyId=?", args: a },
       { sql: "DELETE FROM clients WHERE companyId=?", args: a },
       { sql: "DELETE FROM price_entries WHERE companyId=?", args: a },
@@ -1474,6 +1492,101 @@ export async function deleteActualCost(companyId: number, id: number): Promise<v
   const c = await db();
   await c.execute({
     sql: "DELETE FROM actual_costs WHERE id=? AND companyId=?",
+    args: [id, companyId],
+  });
+}
+
+// ── Faturação por fases (autos de medição) ────────────────────────────
+
+export async function listBillingPhases(
+  companyId: number,
+  budgetId: number
+): Promise<BillingPhase[]> {
+  const c = await db();
+  return rowsToObjects<BillingPhase>(
+    await c.execute({
+      sql: "SELECT * FROM billing_phases WHERE companyId=? AND budgetId=? ORDER BY position, id",
+      args: [companyId, budgetId],
+    })
+  );
+}
+
+/** Todas as fases de faturação da empresa (para somar por obra na lista). */
+export async function listBillingPhasesForCompany(companyId: number): Promise<BillingPhase[]> {
+  const c = await db();
+  return rowsToObjects<BillingPhase>(
+    await c.execute({ sql: "SELECT * FROM billing_phases WHERE companyId=?", args: [companyId] })
+  );
+}
+
+export async function addBillingPhase(
+  companyId: number,
+  budgetId: number,
+  data: { label: string; mode: string; pct: number; amount: number }
+): Promise<number> {
+  const c = await db();
+  const pr = await c.execute({
+    sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM billing_phases WHERE companyId=? AND budgetId=?",
+    args: [companyId, budgetId],
+  });
+  const r = await c.execute({
+    sql: "INSERT INTO billing_phases (companyId, budgetId, position, label, mode, pct, amount) VALUES (?,?,?,?,?,?,?)",
+    args: [companyId, budgetId, scalar(pr, "p"), data.label, data.mode, data.pct, data.amount],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/** Cria várias fases de uma vez (presets), no fim da lista existente. */
+export async function addBillingPhases(
+  companyId: number,
+  budgetId: number,
+  phases: { label: string; mode: string; pct: number; amount: number }[]
+): Promise<void> {
+  if (phases.length === 0) return;
+  const c = await db();
+  const pr = await c.execute({
+    sql: "SELECT COALESCE(MAX(position),-1)+1 AS p FROM billing_phases WHERE companyId=? AND budgetId=?",
+    args: [companyId, budgetId],
+  });
+  const base = scalar(pr, "p");
+  await c.batch(
+    phases.map((ph, i) => ({
+      sql: "INSERT INTO billing_phases (companyId, budgetId, position, label, mode, pct, amount) VALUES (?,?,?,?,?,?,?)",
+      args: [companyId, budgetId, base + i, ph.label, ph.mode, ph.pct, ph.amount],
+    })),
+    "write"
+  );
+}
+
+/** Atualiza o estado de uma fase, gerindo as datas de faturado/pago. */
+export async function setBillingPhaseStatus(
+  companyId: number,
+  id: number,
+  status: string,
+  invoiceRef?: string
+): Promise<void> {
+  const c = await db();
+  // PAID implica faturado; PENDING limpa datas
+  const invoicedAt =
+    status === "INVOICED" || status === "PAID"
+      ? "COALESCE(invoicedAt, datetime('now'))"
+      : "NULL";
+  const paidAt = status === "PAID" ? "COALESCE(paidAt, datetime('now'))" : "NULL";
+  await c.execute({
+    sql: `UPDATE billing_phases SET status=?, invoicedAt=${invoicedAt}, paidAt=${paidAt}${
+      invoiceRef !== undefined ? ", invoiceRef=?" : ""
+    } WHERE id=? AND companyId=?`,
+    args:
+      invoiceRef !== undefined
+        ? [status, invoiceRef, id, companyId]
+        : [status, id, companyId],
+  });
+}
+
+export async function deleteBillingPhase(companyId: number, id: number): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "DELETE FROM billing_phases WHERE id=? AND companyId=?",
     args: [id, companyId],
   });
 }

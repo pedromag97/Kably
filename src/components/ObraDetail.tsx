@@ -2,9 +2,24 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import type { ActualCost } from "@/lib/types";
+import type { ActualCost, BillingPhase } from "@/lib/types";
 import { eur, num } from "@/lib/calc";
-import { addActualCostAction, deleteActualCostAction } from "@/app/actions";
+import {
+  addActualCostAction,
+  addBillingPhaseAction,
+  applyBillingPresetAction,
+  deleteActualCostAction,
+  deleteBillingPhaseAction,
+  setBillingPhaseStatusAction,
+} from "@/app/actions";
+
+type PhaseWithValue = BillingPhase & { value: number };
+
+const PHASE_BADGE: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: "Por faturar", cls: "bg-slate-100 text-slate-600" },
+  INVOICED: { label: "Faturado", cls: "bg-blue-100 text-blue-700" },
+  PAID: { label: "Pago", cls: "bg-emerald-100 text-emerald-700" },
+};
 
 const inputCls =
   "border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
@@ -70,15 +85,27 @@ export default function ObraDetail({
   budget,
   totals,
   costs,
+  phases,
+  totalCIva,
 }: {
   budget: { id: number; number: string; title: string; status: string };
   totals: Totals;
   costs: ActualCost[];
+  phases: PhaseWithValue[];
+  totalCIva: number;
 }) {
   const [, startTransition] = useTransition();
   const [category, setCategory] = useState("MATERIAL");
+  const [phaseMode, setPhaseMode] = useState("PCT");
   const today = new Date().toISOString().slice(0, 10);
   const pct = totals.faturado > 0 ? Math.round((totals.margemReal / totals.faturado) * 100) : null;
+
+  // Agregados de faturação
+  const billed = phases.filter((p) => p.status === "INVOICED" || p.status === "PAID").reduce((s, p) => s + p.value, 0);
+  const paid = phases.filter((p) => p.status === "PAID").reduce((s, p) => s + p.value, 0);
+  const billedPct = totalCIva > 0 ? Math.round((billed / totalCIva) * 100) : 0;
+  const toReceive = billed - paid;
+  const toBill = totalCIva - billed;
 
   return (
     <div className="mt-3">
@@ -131,6 +158,148 @@ export default function ObraDetail({
             </tr>
           </tbody>
         </table>
+      </section>
+
+      {/* Faturação por fases */}
+      <section className="bg-white rounded-xl border border-slate-200 p-4 mb-5">
+        <h2 className="font-semibold mb-1">Faturação por fases</h2>
+        <p className="text-xs text-slate-400 mb-3">Total da obra (c/ IVA): {eur(totalCIva)}</p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <Stat label={`Faturado (${billedPct}%)`} value={eur(billed)} />
+          <Stat label="Recebido" value={eur(paid)} tone="green" />
+          <Stat label="Por receber" value={eur(toReceive)} />
+          <Stat label="Por faturar" value={eur(toBill)} tone={toBill < -0.005 ? "red" : undefined} />
+        </div>
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex mb-4">
+          <div className="bg-emerald-500" style={{ width: `${totalCIva > 0 ? Math.min(100, (paid / totalCIva) * 100) : 0}%` }} />
+          <div className="bg-blue-400" style={{ width: `${totalCIva > 0 ? Math.min(100, (toReceive / totalCIva) * 100) : 0}%` }} />
+        </div>
+
+        {phases.length === 0 ? (
+          <div className="grid gap-2">
+            <p className="text-sm text-slate-500">Sem fases. Começa por um plano:</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: "30-40-30", label: "30 / 40 / 30" },
+                { key: "50-50", label: "50 / 50" },
+                { key: "100", label: "100% no fim" },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => startTransition(() => applyBillingPresetAction(budget.id, p.key))}
+                  className="border border-slate-300 hover:bg-slate-100 px-3 py-1.5 rounded-lg text-sm font-medium"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400">…ou adiciona fases à mão abaixo.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="text-xs text-slate-400 text-left border-b border-slate-200">
+                  <th className="px-3 py-2 font-medium">Fase</th>
+                  <th className="px-2 py-2 font-medium text-right">Valor</th>
+                  <th className="px-2 py-2 font-medium">Estado</th>
+                  <th className="px-2 py-2 font-medium">Nº fatura</th>
+                  <th className="px-2 py-2 font-medium text-right">Ações</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {phases.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-medium">
+                      {p.label}
+                      {p.mode === "PCT" && <span className="text-slate-400 font-normal"> · {num(p.pct)}%</span>}
+                    </td>
+                    <td className="px-2 py-2 text-right font-medium">{eur(p.value)}</td>
+                    <td className="px-2 py-2">
+                      <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${PHASE_BADGE[p.status]?.cls ?? ""}`}>
+                        {PHASE_BADGE[p.status]?.label ?? p.status}
+                      </span>
+                      {p.paidAt && <span className="text-[10px] text-slate-400 ml-1">{p.paidAt.slice(0, 10)}</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        defaultValue={p.invoiceRef}
+                        placeholder="—"
+                        onBlur={(e) => {
+                          if (e.target.value !== p.invoiceRef)
+                            startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, p.status, e.target.value));
+                        }}
+                        className="border border-slate-200 rounded px-1.5 py-1 text-xs w-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                      {p.status === "PENDING" && (
+                        <button onClick={() => startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, "INVOICED"))} className="text-blue-600 hover:underline">
+                          Faturar
+                        </button>
+                      )}
+                      {p.status === "INVOICED" && (
+                        <>
+                          <button onClick={() => startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, "PAID"))} className="text-emerald-600 hover:underline mr-2">
+                            Pago
+                          </button>
+                          <button onClick={() => startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, "PENDING"))} className="text-slate-400 hover:underline">
+                            Reabrir
+                          </button>
+                        </>
+                      )}
+                      {p.status === "PAID" && (
+                        <button onClick={() => startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, "INVOICED"))} className="text-slate-400 hover:underline">
+                          Reabrir
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <button onClick={() => startTransition(() => deleteBillingPhaseAction(budget.id, p.id))} className="text-slate-400 hover:text-red-600">
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <form
+          id="phase-form"
+          action={(fd) =>
+            startTransition(async () => {
+              await addBillingPhaseAction(budget.id, fd);
+              (document.getElementById("phase-form") as HTMLFormElement)?.reset();
+              setPhaseMode("PCT");
+            })
+          }
+          className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end mt-4 pt-4 border-t border-slate-100"
+        >
+          <label className="grid gap-1 text-xs font-medium col-span-2">
+            Nova fase
+            <input name="label" placeholder="Ex.: Adiantamento" className={inputCls} />
+          </label>
+          <label className="grid gap-1 text-xs font-medium">
+            Tipo
+            <select name="mode" value={phaseMode} onChange={(e) => setPhaseMode(e.target.value)} className={inputCls}>
+              <option value="PCT">% do total</option>
+              <option value="FIXED">Valor (€)</option>
+            </select>
+          </label>
+          <div className="flex gap-2 items-end">
+            <label className="grid gap-1 text-xs font-medium flex-1">
+              {phaseMode === "PCT" ? "%" : "€"}
+              <input name="value" inputMode="decimal" className={inputCls} />
+            </label>
+            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+              +
+            </button>
+          </div>
+        </form>
       </section>
 
       {/* Diário de custos */}

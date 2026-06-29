@@ -118,6 +118,14 @@ identificadores de código em inglês.
   = faturado − Σ custos lançados. Para um orçamento virar obra há "Marcar como
   aceite" no menu Ações (`setBudgetStatus`); aceites mostram "Abrir obra". Cascata
   em `deleteBudget` + `deleteCompany`.
+- **Faturação por fases (Fase 9):** tabela `billing_phases` (por orçamento:
+  label, `mode` PCT/FIXED, pct, amount, `status` PENDING/INVOICED/PAID,
+  invoiceRef, invoicedAt, paidAt). Secção "Faturação por fases" na obra: base =
+  **total c/IVA** (`budgetTotals.total`); fase em % → valor = total×%/100, fase
+  fixa → valor em €. Presets 30/40/30, 50/50, 100% no fim. Progresso: faturado %,
+  recebido (pago), por receber (faturado−pago), por faturar. A lista `/obras`
+  mostra **por receber** por obra + total. Integração com software de faturação
+  certificado (Moloni/InvoiceXpress) fica para quando o Pedro tiver conta.
 
 ## Mapa do código
 

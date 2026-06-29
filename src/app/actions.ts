@@ -136,6 +136,72 @@ export async function deleteActualCostAction(budgetId: number, costId: number) {
   revalidatePath("/obras");
 }
 
+// ── Faturação por fases ───────────────────────────────────────────────
+
+export async function addBillingPhaseAction(budgetId: number, fd: FormData) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const mode = str(fd, "mode") === "FIXED" ? "FIXED" : "PCT";
+  const value = flt(fd, "value", 0);
+  await store.addBillingPhase(companyId, budgetId, {
+    label: str(fd, "label") || "Fase",
+    mode,
+    pct: mode === "PCT" ? value : 0,
+    amount: mode === "FIXED" ? value : 0,
+  });
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
+const BILLING_PRESETS: Record<string, { label: string; pct: number }[]> = {
+  "30-40-30": [
+    { label: "Adiantamento", pct: 30 },
+    { label: "A meio da obra", pct: 40 },
+    { label: "Final", pct: 30 },
+  ],
+  "50-50": [
+    { label: "Adiantamento", pct: 50 },
+    { label: "Final", pct: 50 },
+  ],
+  "100": [{ label: "Total no fim", pct: 100 }],
+};
+
+export async function applyBillingPresetAction(budgetId: number, preset: string) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const phases = BILLING_PRESETS[preset];
+  if (!phases) return;
+  await store.addBillingPhases(
+    companyId,
+    budgetId,
+    phases.map((p) => ({ label: p.label, mode: "PCT", pct: p.pct, amount: 0 }))
+  );
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
+export async function setBillingPhaseStatusAction(
+  budgetId: number,
+  phaseId: number,
+  status: string,
+  invoiceRef?: string
+) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const clean = ["PENDING", "INVOICED", "PAID"].includes(status) ? status : "PENDING";
+  await store.setBillingPhaseStatus(companyId, phaseId, clean, invoiceRef);
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
+export async function deleteBillingPhaseAction(budgetId: number, phaseId: number) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  await store.deleteBillingPhase(companyId, phaseId);
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
   const companyId = await ownedBudget(budgetId);
   if (!companyId) return;

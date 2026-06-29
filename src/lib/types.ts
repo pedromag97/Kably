@@ -41,6 +41,24 @@ export type ActualCost = {
   createdAt: string;
 };
 
+export type BillingPhaseStatus = "PENDING" | "INVOICED" | "PAID";
+
+export type BillingPhase = {
+  id: number;
+  companyId: number;
+  budgetId: number;
+  position: number;
+  label: string;
+  mode: "PCT" | "FIXED"; // % do total da obra ou valor fixo
+  pct: number;
+  amount: number;
+  status: BillingPhaseStatus;
+  invoiceRef: string; // nº da fatura (manual, opcional)
+  invoicedAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+};
+
 export type Supplier = { id: number; companyId: number; name: string };
 
 export type PriceEntry = {
