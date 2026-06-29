@@ -85,6 +85,7 @@ export type Budget = {
   laborOnly: number; // 1 = só mão de obra (material fornecido pelo cliente)
   materialFeePct: number; // % de gestão sobre o material fornecido (só-MO)
   notes: string;
+  revisionOf: number | null; // id do orçamento base (null se for original)
   shareToken: string | null; // token do link público (null até ser partilhado)
   status: string; // DRAFT | SENT | ACCEPTED | REJECTED
   sentAt: string | null;

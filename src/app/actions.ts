@@ -92,11 +92,21 @@ export async function duplicateBudgetAction(budgetId: number) {
   if (newId) redirect(`/orcamentos/${newId}`);
 }
 
+export async function createRevisionAction(budgetId: number) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const newId = await store.createRevision(companyId, budgetId);
+  revalidatePath("/orcamentos");
+  if (newId) redirect(`/orcamentos/${newId}`);
+}
+
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
   const companyId = await ownedBudget(budgetId);
   if (!companyId) return;
+  const clientId = await resolveClientId(companyId, fd);
   await store.updateBudget(companyId, budgetId, {
     title: str(fd, "title"),
+    clientId,
     clientName: str(fd, "clientName"),
     clientNif: str(fd, "clientNif"),
     clientEmail: str(fd, "clientEmail"),

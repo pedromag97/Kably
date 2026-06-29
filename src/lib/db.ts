@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   laborOnly INTEGER NOT NULL DEFAULT 0,
   materialFeePct REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
+  revisionOf INTEGER,
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -289,6 +290,7 @@ async function migrate(c: DbClient) {
   // Clientes + follow-up (gestão de clientes e painel)
   await addColumn("budgets", "clientId", "clientId INTEGER");
   await addColumn("companies", "followUpDays", "followUpDays INTEGER NOT NULL DEFAULT 5");
+  await addColumn("budgets", "revisionOf", "revisionOf INTEGER");
 }
 
 // ── Mapeamento de linhas → objetos simples ────────────────────────────
@@ -1292,6 +1294,53 @@ export async function duplicateBudget(
       src.clientNif, src.clientEmail, src.clientPhone, src.siteAddress, src.vatMode,
       src.materialMargin, src.laborMargin, src.laborRate, src.validityDays, src.laborOnly,
       src.materialFeePct, src.notes,
+    ],
+  });
+  const newId = Number(r.lastInsertRowid);
+  for (const ch of src.chapters) {
+    const chId = await addChapter(newId, ch.name);
+    if (ch.items.length > 0) {
+      await c.batch(
+        ch.items.map((it, i) => ({
+          sql: "INSERT INTO budget_items (chapterId, articleId, name, unit, quantity, materialCost, laborHours, materialIncluded, position) VALUES (?,?,?,?,?,?,?,?,?)",
+          args: [chId, it.articleId, it.name, it.unit, it.quantity, it.materialCost, it.laborHours, it.materialIncluded, i],
+        })),
+        "write"
+      );
+    }
+  }
+  return newId;
+}
+
+/** Cria uma nova revisão de um orçamento: cópia em rascunho ligada ao
+ *  orçamento base (revisionOf), numerada «BASE (Rev.N)». */
+export async function createRevision(
+  companyId: number,
+  budgetId: number
+): Promise<number | null> {
+  const src = await getBudget(companyId, budgetId);
+  if (!src) return null;
+  const c = await db();
+  const rootId = src.revisionOf ?? src.id;
+  const root = firstRow<{ number: string }>(
+    await c.execute({ sql: "SELECT number FROM budgets WHERE id=? AND companyId=?", args: [rootId, companyId] })
+  );
+  const baseNumber = root?.number ?? src.number;
+  const existing = scalar(
+    await c.execute({ sql: "SELECT COUNT(*) AS n FROM budgets WHERE companyId=? AND revisionOf=?", args: [companyId, rootId] }),
+    "n"
+  );
+  const number = `${baseNumber} (Rev.${existing + 1})`;
+  const r = await c.execute({
+    sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif,
+       clientEmail, clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate,
+       validityDays, laborOnly, materialFeePct, notes, revisionOf)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      companyId, number, src.title, src.clientId ?? null, src.clientName, src.clientNif,
+      src.clientEmail, src.clientPhone, src.siteAddress, src.vatMode, src.materialMargin,
+      src.laborMargin, src.laborRate, src.validityDays, src.laborOnly, src.materialFeePct,
+      src.notes, rootId,
     ],
   });
   const newId = Number(r.lastInsertRowid);

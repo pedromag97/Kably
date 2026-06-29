@@ -102,6 +102,13 @@ identificadores de código em inglês.
   por estado + conversão, valores (pipeline/ganho/médio), lista de **follow-up**
   (enviados sem resposta há > `companies.followUpDays` dias, configurável nas
   Definições) e **validade expirada**, com selector mês/trimestre/ano/tudo.
+- **Seletor de cliente no editor + revisões (Fase 7):** o editor de orçamento
+  tem agora seletor de ficha de cliente (preenche os campos + religa `clientId`;
+  `updateBudgetMetaAction` deduplica por NIF→nome como na criação). **Revisões**:
+  `budgets.revisionOf` aponta para o orçamento base; "Nova revisão" (menu Ações)
+  cria cópia em rascunho numerada `BASE (Rev.N)` ligada à raiz, com crachá
+  "Revisão de …" no editor. Duplicar (cópia solta) e Revisão (versão ligada) são
+  ações distintas.
 
 ## Mapa do código
 

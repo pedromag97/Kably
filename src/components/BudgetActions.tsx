@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import ShareBudget from "./ShareBudget";
+import { createRevisionAction } from "@/app/actions";
 
 /** Menu "Ações" do editor: agrupa PDFs e envio ao cliente num só botão. */
 export default function BudgetActions({
@@ -15,6 +16,7 @@ export default function BudgetActions({
 }) {
   const [open, setOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,6 +75,15 @@ export default function BudgetActions({
             PDF interno (com custos)
           </a>
           <div className="border-t border-slate-100 my-1" />
+          <button
+            onClick={() => {
+              setOpen(false);
+              startTransition(() => createRevisionAction(budgetId));
+            }}
+            className={itemCls}
+          >
+            Nova revisão
+          </button>
           <button
             onClick={() => {
               setOpen(false);

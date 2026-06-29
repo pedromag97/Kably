@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import type { Article, BudgetFull, BudgetItem } from "@/lib/types";
+import type { Article, BudgetFull, BudgetItem, Client } from "@/lib/types";
 import { budgetTotals, eur, itemTotals, num, VAT_MODES } from "@/lib/calc";
 import {
   addBlankItemAction,
@@ -285,14 +285,38 @@ function ArticlePicker({
 export default function BudgetEditor({
   budget,
   articles,
+  clients,
+  revisionBase,
 }: {
   budget: BudgetFull;
   articles: Article[];
+  clients: Client[];
+  revisionBase: { id: number; number: string } | null;
 }) {
   const [, startTransition] = useTransition();
   const [picker, setPicker] = useState<number | null>(null);
   const totals = budgetTotals(budget);
   const vat = VAT_MODES[budget.vatMode];
+
+  // Campos do cliente controlados, para o seletor poder preenchê-los.
+  const [clientId, setClientId] = useState<string>(budget.clientId ? String(budget.clientId) : "");
+  const [clientName, setClientName] = useState(budget.clientName);
+  const [clientNif, setClientNif] = useState(budget.clientNif);
+  const [clientEmail, setClientEmail] = useState(budget.clientEmail);
+  const [clientPhone, setClientPhone] = useState(budget.clientPhone);
+  const [siteAddress, setSiteAddress] = useState(budget.siteAddress);
+
+  function pickClient(value: string) {
+    setClientId(value);
+    const c = clients.find((x) => String(x.id) === value);
+    if (c) {
+      setClientName(c.name);
+      setClientNif(c.nif);
+      setClientEmail(c.email);
+      setClientPhone(c.phone);
+      setSiteAddress(c.address);
+    }
+  }
 
   return (
     <div className="grid gap-5">
@@ -316,6 +340,15 @@ export default function BudgetEditor({
             SÓ MÃO DE OBRA
           </span>
         )}
+        {revisionBase && (
+          <Link
+            href={`/orcamentos/${revisionBase.id}`}
+            className="text-xs font-semibold bg-violet-100 text-violet-700 rounded px-2 py-1 hover:bg-violet-200"
+            title="Ver o orçamento base"
+          >
+            Revisão de {revisionBase.number}
+          </Link>
+        )}
         <h1 className="text-xl font-bold flex-1 min-w-0 truncate">{budget.title}</h1>
         <BudgetActions
           budgetId={budget.id}
@@ -333,29 +366,69 @@ export default function BudgetEditor({
           action={(fd) => startTransition(() => updateBudgetMetaAction(budget.id, fd))}
           className="p-4 pt-0 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm"
         >
+          <input type="hidden" name="clientId" value={clientId} />
           <label className="grid gap-1 col-span-2 sm:col-span-3 font-medium">
             Título
             <input name="title" defaultValue={budget.title} className={inputCls} />
           </label>
+          {clients.length > 0 && (
+            <label className="grid gap-1 font-medium col-span-2 sm:col-span-3">
+              Ficha de cliente
+              <select value={clientId} onChange={(e) => pickClient(e.target.value)} className={inputCls}>
+                <option value="">— sem ficha / avulso —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.nif ? ` — ${c.nif}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="grid gap-1 font-medium">
             Cliente
-            <input name="clientName" defaultValue={budget.clientName} className={inputCls} />
+            <input
+              name="clientName"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="grid gap-1 font-medium">
             NIF
-            <input name="clientNif" defaultValue={budget.clientNif} className={inputCls} />
+            <input
+              name="clientNif"
+              value={clientNif}
+              onChange={(e) => setClientNif(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="grid gap-1 font-medium">
             Email
-            <input name="clientEmail" defaultValue={budget.clientEmail} className={inputCls} />
+            <input
+              name="clientEmail"
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="grid gap-1 font-medium">
             Telefone
-            <input name="clientPhone" defaultValue={budget.clientPhone} className={inputCls} />
+            <input
+              name="clientPhone"
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="grid gap-1 font-medium col-span-2">
             Morada da obra
-            <input name="siteAddress" defaultValue={budget.siteAddress} className={inputCls} />
+            <input
+              name="siteAddress"
+              value={siteAddress}
+              onChange={(e) => setSiteAddress(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="grid gap-1 font-medium">
             Regime de IVA
