@@ -15,7 +15,7 @@ import {
   updateBudgetMetaAction,
   updateItemAction,
 } from "@/app/actions";
-import ShareBudget from "@/components/ShareBudget";
+import BudgetActions from "@/components/BudgetActions";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   SENT: { label: "Enviado", cls: "bg-blue-100 text-blue-700" },
@@ -317,21 +317,7 @@ export default function BudgetEditor({
           </span>
         )}
         <h1 className="text-xl font-bold flex-1 min-w-0 truncate">{budget.title}</h1>
-        <a
-          href={`/orcamentos/${budget.id}/pdf?v=cliente`}
-          target="_blank"
-          className="bg-white border border-slate-300 hover:border-slate-400 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium"
-        >
-          PDF Cliente
-        </a>
-        <a
-          href={`/orcamentos/${budget.id}/pdf?v=interna`}
-          target="_blank"
-          className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
-        >
-          PDF Interno
-        </a>
-        <ShareBudget
+        <BudgetActions
           budgetId={budget.id}
           number={budget.number}
           clientEmail={budget.clientEmail}

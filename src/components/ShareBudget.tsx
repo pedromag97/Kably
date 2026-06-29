@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { sendBudgetAction, shareLinkAction } from "@/app/actions";
 
 const inputCls =
@@ -10,12 +10,22 @@ export default function ShareBudget({
   budgetId,
   number,
   clientEmail,
+  renderTrigger,
+  open: openProp,
+  onOpenChange,
 }: {
   budgetId: number;
   number: string;
   clientEmail: string;
+  /** Permite renderizar o gatilho à medida (ex.: item de menu). `null` = sem gatilho. */
+  renderTrigger?: (open: () => void) => ReactNode;
+  /** Modo controlado: estado do modal gerido pelo componente-pai. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (v: boolean) => (onOpenChange ? onOpenChange(v) : setOpenState(v));
   const [pending, startTransition] = useTransition();
   const [to, setTo] = useState(clientEmail);
   const [subject, setSubject] = useState(`Orçamento ${number}`);
@@ -62,12 +72,16 @@ export default function ShareBudget({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
-      >
-        Enviar ao cliente
-      </button>
+      {renderTrigger ? (
+        renderTrigger(() => setOpen(true))
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
+        >
+          Enviar ao cliente
+        </button>
+      )}
 
       {open && (
         <div
