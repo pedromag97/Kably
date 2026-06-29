@@ -83,7 +83,7 @@ function BudgetMock() {
   ];
   return (
     <div className="relative">
-      <div className="absolute -inset-4 bg-blue-500/20 rounded-3xl blur-2xl" />
+      <div className="hidden sm:block absolute -inset-4 bg-blue-500/20 rounded-3xl blur-2xl" />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 rotate-1">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
@@ -122,12 +122,12 @@ export default async function LandingPage() {
   if (await getCurrentUser()) redirect("/painel");
 
   return (
-    <div className="grid gap-16 sm:gap-24 py-6">
+    <div className="grid gap-16 sm:gap-24 py-6 overflow-x-hidden">
       {/* Hero */}
       <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white px-6 py-14 sm:px-12 sm:py-16">
-        <div className="absolute -top-32 -right-20 w-96 h-96 bg-blue-600/30 rounded-full blur-3xl" />
-        <div className="absolute -bottom-32 -left-20 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl" />
-        <div className="relative grid lg:grid-cols-2 gap-12 items-center">
+        <div className="hidden sm:block absolute -top-32 -right-20 w-96 h-96 bg-blue-600/30 rounded-full blur-3xl" />
+        <div className="hidden sm:block absolute -bottom-32 -left-20 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl" />
+        <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div className="grid gap-6">
             <span className="w-fit text-xs font-medium bg-white/10 text-amber-300 rounded-full px-3 py-1">
               ⚡ Feito para eletricistas
@@ -209,7 +209,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Destaque: do MQT ao orçamento */}
-      <section className="grid lg:grid-cols-2 gap-10 items-center">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
         <div className="grid gap-4">
           <span className="w-fit text-xs font-semibold bg-blue-100 text-blue-700 rounded-full px-3 py-1">
             Importação de MQT
@@ -242,9 +242,9 @@ export default async function LandingPage() {
               ["Execução de roços em alvenaria", "Abertura e fecho de roços", "67%"],
             ].map(([mqt, art, tag]) => (
               <div key={mqt} className="flex items-center gap-2 text-xs border border-slate-100 rounded-lg px-3 py-2">
-                <span className="flex-1 text-slate-500 truncate">{mqt}</span>
+                <span className="flex-1 min-w-0 text-slate-500 truncate">{mqt}</span>
                 <span className="text-slate-300">→</span>
-                <span className="font-medium text-slate-700 truncate max-w-[40%]">{art}</span>
+                <span className="font-medium text-slate-700 truncate min-w-0 max-w-[45%]">{art}</span>
                 <span className="text-[10px] font-semibold text-emerald-600 whitespace-nowrap">{tag}</span>
               </div>
             ))}
@@ -334,7 +334,7 @@ export default async function LandingPage() {
 
       {/* CTA final */}
       <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white px-6 py-14 text-center grid gap-5">
-        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/25 rounded-full blur-3xl" />
+        <div className="hidden sm:block absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/25 rounded-full blur-3xl" />
         <div className="relative grid gap-5">
           <h2 className="text-3xl font-bold">Faz o teu próximo orçamento no Kably</h2>
           <p className="text-slate-300 max-w-md mx-auto">
