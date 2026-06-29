@@ -27,6 +27,20 @@ export type Client = {
   createdAt: string;
 };
 
+export type ActualCostCategory = "MATERIAL" | "LABOR" | "OTHER";
+
+export type ActualCost = {
+  id: number;
+  companyId: number;
+  budgetId: number;
+  date: string; // YYYY-MM-DD
+  category: ActualCostCategory;
+  description: string;
+  amount: number; // € gastos
+  hours: number; // horas (mão de obra)
+  createdAt: string;
+};
+
 export type Supplier = { id: number; companyId: number; name: string };
 
 export type PriceEntry = {

@@ -100,6 +100,42 @@ export async function createRevisionAction(budgetId: number) {
   if (newId) redirect(`/orcamentos/${newId}`);
 }
 
+/** Marca/reabre o estado do orçamento (ex.: "ganho" → aparece em Obras). */
+export async function setBudgetStatusAction(budgetId: number, status: string) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  await store.setBudgetStatus(companyId, budgetId, status);
+  revalidatePath(`/orcamentos/${budgetId}`);
+  revalidatePath("/orcamentos");
+  revalidatePath("/obras");
+  revalidatePath("/painel");
+}
+
+// ── Obras: custos reais (orçado vs. real) ─────────────────────────────
+
+export async function addActualCostAction(budgetId: number, fd: FormData) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  const category = (str(fd, "category") || "MATERIAL").toUpperCase();
+  await store.addActualCost(companyId, budgetId, {
+    date: str(fd, "date") || new Date().toISOString().slice(0, 10),
+    category: ["MATERIAL", "LABOR", "OTHER"].includes(category) ? category : "MATERIAL",
+    description: str(fd, "description"),
+    amount: flt(fd, "amount", 0),
+    hours: flt(fd, "hours", 0),
+  });
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
+export async function deleteActualCostAction(budgetId: number, costId: number) {
+  const companyId = await ownedBudget(budgetId);
+  if (!companyId) return;
+  await store.deleteActualCost(companyId, costId);
+  revalidatePath(`/obras/${budgetId}`);
+  revalidatePath("/obras");
+}
+
 export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
   const companyId = await ownedBudget(budgetId);
   if (!companyId) return;

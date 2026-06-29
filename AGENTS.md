@@ -109,6 +109,15 @@ identificadores de código em inglês.
   cria cópia em rascunho numerada `BASE (Rev.N)` ligada à raiz, com crachá
   "Revisão de …" no editor. Duplicar (cópia solta) e Revisão (versão ligada) são
   ações distintas.
+- **Orçado vs. Real / Obras (Fase 8):** tabela `actual_costs` (por orçamento:
+  data, categoria MATERIAL/LABOR/OTHER, descrição, `amount` €, `hours`). Os
+  orçamentos **aceites** aparecem em **`/obras`** (lista com faturado / custo real /
+  margem real %). `/obras/[id]`: resumo (faturado s/IVA · custo real · **margem
+  real** · margem orçada de referência = `budgetTotals.profit`), comparação
+  **orçado vs real** (material €, horas) e **diário de custos** datado. Margem real
+  = faturado − Σ custos lançados. Para um orçamento virar obra há "Marcar como
+  aceite" no menu Ações (`setBudgetStatus`); aceites mostram "Abrir obra". Cascata
+  em `deleteBudget` + `deleteCompany`.
 
 ## Mapa do código
 
@@ -133,6 +142,7 @@ identificadores de código em inglês.
 | `src/app/clientes/[id]/` + `ClientDetail.tsx` | Ficha do cliente: orçamentos, totais, notas, novo orçamento |
 | `src/app/clientes/migrar/` + `ClientMigration.tsx` | Migração: cria fichas a partir de orçamentos antigos (dedup) |
 | `src/components/NewBudgetForm.tsx` | Form de novo orçamento com selecção/auto-guardar de cliente |
+| `src/app/obras/` + `ObraDetail.tsx` | Orçado vs. real: lista de obras (aceites) + detalhe com comparação e diário de custos reais |
 | `src/lib/matching.ts` | Importação MQT: normalização PT, pontuação de semelhança, adivinha de colunas, mapa categoria→capítulo |
 | `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
 | `scripts/iniciar.ps1` | Arranca servidor + túnel Cloudflare e mostra URL pública |

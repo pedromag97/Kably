@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SEED_ARTICLES, DEFAULT_CONDITIONS } from "./seed-data";
 import type {
+  ActualCost,
   Article,
   Budget,
   BudgetFull,
@@ -170,6 +171,17 @@ CREATE TABLE IF NOT EXISTS clients (
   phone TEXT NOT NULL DEFAULT '',
   address TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS actual_costs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  companyId INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  budgetId INTEGER NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'MATERIAL',
+  description TEXT NOT NULL DEFAULT '',
+  amount REAL NOT NULL DEFAULT 0,
+  hours REAL NOT NULL DEFAULT 0,
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
@@ -653,6 +665,7 @@ export async function deleteBudget(companyId: number, id: number): Promise<void>
               (SELECT id FROM budgets WHERE id=? AND companyId=?)`,
         args: [id, companyId],
       },
+      { sql: "DELETE FROM actual_costs WHERE budgetId=? AND companyId=?", args: [id, companyId] },
       { sql: "DELETE FROM budgets WHERE id=? AND companyId=?", args: [id, companyId] },
     ],
     "write"
@@ -1079,6 +1092,7 @@ export async function deleteCompany(companyId: number): Promise<void> {
         args: a,
       },
       { sql: "DELETE FROM budget_chapters WHERE budgetId IN (SELECT id FROM budgets WHERE companyId=?)", args: a },
+      { sql: "DELETE FROM actual_costs WHERE companyId=?", args: a },
       { sql: "DELETE FROM budgets WHERE companyId=?", args: a },
       { sql: "DELETE FROM clients WHERE companyId=?", args: a },
       { sql: "DELETE FROM price_entries WHERE companyId=?", args: a },
@@ -1403,4 +1417,63 @@ export async function listBudgetsFull(companyId: number): Promise<BudgetFull[]> 
       items: itemsByChapter.get(ch.id) ?? [],
     })),
   }));
+}
+
+// ── Obras: custos reais (orçado vs. real) ─────────────────────────────
+
+/** Muda o estado de um orçamento (ex.: marcar como aceite/ganho). */
+export async function setBudgetStatus(
+  companyId: number,
+  budgetId: number,
+  status: string
+): Promise<void> {
+  const c = await db();
+  const decided = status === "ACCEPTED" || status === "REJECTED";
+  await c.execute({
+    sql: `UPDATE budgets SET status=?, decidedAt=${decided ? "COALESCE(decidedAt, datetime('now'))" : "decidedAt"}
+          WHERE id=? AND companyId=?`,
+    args: [status, budgetId, companyId],
+  });
+}
+
+export async function listActualCosts(
+  companyId: number,
+  budgetId: number
+): Promise<ActualCost[]> {
+  const c = await db();
+  return rowsToObjects<ActualCost>(
+    await c.execute({
+      sql: "SELECT * FROM actual_costs WHERE companyId=? AND budgetId=? ORDER BY date DESC, id DESC",
+      args: [companyId, budgetId],
+    })
+  );
+}
+
+/** Todos os custos reais da empresa (para somar por obra na lista). */
+export async function listActualCostsForCompany(companyId: number): Promise<ActualCost[]> {
+  const c = await db();
+  return rowsToObjects<ActualCost>(
+    await c.execute({ sql: "SELECT * FROM actual_costs WHERE companyId=?", args: [companyId] })
+  );
+}
+
+export async function addActualCost(
+  companyId: number,
+  budgetId: number,
+  data: { date: string; category: string; description: string; amount: number; hours: number }
+): Promise<number> {
+  const c = await db();
+  const r = await c.execute({
+    sql: "INSERT INTO actual_costs (companyId, budgetId, date, category, description, amount, hours) VALUES (?,?,?,?,?,?,?)",
+    args: [companyId, budgetId, data.date, data.category, data.description, data.amount, data.hours],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function deleteActualCost(companyId: number, id: number): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "DELETE FROM actual_costs WHERE id=? AND companyId=?",
+    args: [id, companyId],
+  });
 }

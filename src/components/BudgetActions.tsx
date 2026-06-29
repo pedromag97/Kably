@@ -1,18 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import ShareBudget from "./ShareBudget";
-import { createRevisionAction } from "@/app/actions";
+import { createRevisionAction, setBudgetStatusAction } from "@/app/actions";
 
 /** Menu "Ações" do editor: agrupa PDFs e envio ao cliente num só botão. */
 export default function BudgetActions({
   budgetId,
   number,
   clientEmail,
+  status,
 }: {
   budgetId: number;
   number: string;
   clientEmail: string;
+  status: string;
 }) {
   const [open, setOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -75,6 +78,21 @@ export default function BudgetActions({
             PDF interno (com custos)
           </a>
           <div className="border-t border-slate-100 my-1" />
+          {status === "ACCEPTED" ? (
+            <Link href={`/obras/${budgetId}`} onClick={() => setOpen(false)} className={`${itemCls} text-blue-700 font-medium`}>
+              Abrir obra (custos reais)
+            </Link>
+          ) : (
+            <button
+              onClick={() => {
+                setOpen(false);
+                startTransition(() => setBudgetStatusAction(budgetId, "ACCEPTED"));
+              }}
+              className={itemCls}
+            >
+              Marcar como aceite (vira obra)
+            </button>
+          )}
           <button
             onClick={() => {
               setOpen(false);

@@ -354,6 +354,7 @@ export default function BudgetEditor({
           budgetId={budget.id}
           number={budget.number}
           clientEmail={budget.clientEmail}
+          status={budget.status}
         />
       </div>
 
