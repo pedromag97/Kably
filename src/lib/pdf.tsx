@@ -335,3 +335,118 @@ export function BudgetPdf({
     </Document>
   );
 }
+
+// ── Auto de medição / nota de faturação por fase ──────────────────────
+
+export function AutoMedicaoPdf({
+  budget,
+  company,
+  phase,
+  emittedAt,
+}: {
+  budget: BudgetFull;
+  company: Company;
+  phase: { label: string; mode: string; pct: number; value: number; index: number; total: number };
+  emittedAt: string; // data de emissão (dd/mm/aaaa)
+}) {
+  const vat = VAT_MODES[budget.vatMode] ?? VAT_MODES.NORMAL;
+  const valorCIva = phase.value;
+  const valorSIva = vat.rate > 0 ? valorCIva / (1 + vat.rate) : valorCIva;
+  const iva = valorCIva - valorSIva;
+  const docNumber = `${budget.number} · Fase ${phase.index}/${phase.total}`;
+
+  return (
+    <Document title={`Auto de medição ${budget.number}`} author={company.name}>
+      <Page size="A4" style={s.page}>
+        {/* Cabeçalho */}
+        <View style={s.headerRow}>
+          <View style={{ maxWidth: 280 }}>
+            {company.logo ? <Image style={s.logo} src={company.logo} /> : null}
+            <Text style={s.companyName}>{company.name}</Text>
+            {company.nif ? <Text style={s.small}>NIF: {company.nif}</Text> : null}
+            {company.address ? <Text style={s.small}>{company.address}</Text> : null}
+            <Text style={s.small}>
+              {[company.phone, company.email].filter(Boolean).join("  ·  ")}
+            </Text>
+          </View>
+          <View>
+            <Text style={s.docTitle}>AUTO DE MEDIÇÃO</Text>
+            <Text style={s.budgetNumber}>{docNumber}</Text>
+            <Text style={[s.small, { textAlign: "right", marginTop: 4 }]}>Data: {emittedAt}</Text>
+          </View>
+        </View>
+
+        {/* Cliente */}
+        <View style={s.clientBox}>
+          <View style={{ maxWidth: 250 }}>
+            <Text style={s.label}>Cliente</Text>
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>{budget.clientName || "—"}</Text>
+            {budget.clientNif ? <Text style={s.small}>NIF: {budget.clientNif}</Text> : null}
+            <Text style={s.small}>
+              {[budget.clientPhone, budget.clientEmail].filter(Boolean).join("  ·  ")}
+            </Text>
+          </View>
+          <View style={{ maxWidth: 220 }}>
+            <Text style={s.label}>Local da obra</Text>
+            <Text>{budget.siteAddress || "—"}</Text>
+          </View>
+        </View>
+
+        <Text style={s.title}>{budget.title}</Text>
+
+        {/* Linha da fase */}
+        <View style={s.chapterHeader} wrap={false}>
+          <Text style={s.chapterName}>FASE DE FATURAÇÃO</Text>
+        </View>
+        <View style={[s.row, { paddingVertical: 8 }]} wrap={false}>
+          <Text style={s.cName}>
+            {phase.label}
+            {phase.mode === "PCT" ? `  (${qty(phase.pct)}% do total da obra)` : ""}
+          </Text>
+          <Text style={[s.cMoneyWide, { fontFamily: "Helvetica-Bold" }]}>{fmt(valorCIva)}</Text>
+        </View>
+
+        {/* Totais */}
+        <View style={s.totalsBox} wrap={false}>
+          <View style={[s.totalsRow, { borderTopWidth: 0.5, borderTopColor: "#cbd5e1" }]}>
+            <Text>Valor (s/ IVA)</Text>
+            <Text>{fmt(valorSIva)}</Text>
+          </View>
+          <View style={s.totalsRow}>
+            <Text>{vat.label}</Text>
+            <Text>{fmt(iva)}</Text>
+          </View>
+          <View style={s.grandTotal}>
+            <Text>TOTAL A FATURAR</Text>
+            <Text>{fmt(valorCIva)}</Text>
+          </View>
+        </View>
+
+        {vat.pdfNote ? <Text style={[s.small, { marginTop: 8 }]}>{vat.pdfNote}</Text> : null}
+
+        <Text style={[s.small, { marginTop: 16 }]}>
+          Documento de medição relativo a esta fase da empreitada {budget.number}. Os valores
+          referem-se à parcela acima do total contratado. Não substitui fatura/recibo emitido
+          por software certificado.
+        </Text>
+
+        {company.conditions ? (
+          <View wrap={false}>
+            <Text style={s.sectionTitle}>Condições</Text>
+            <Text style={s.small}>{company.conditions}</Text>
+          </View>
+        ) : null}
+
+        {/* Rodapé */}
+        <View style={s.footer} fixed>
+          <Text>
+            {[company.name, company.nif && `NIF ${company.nif}`, company.phone, company.email]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </Text>
+          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
+      </Page>
+    </Document>
+  );
+}

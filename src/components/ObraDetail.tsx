@@ -235,6 +235,13 @@ export default function ObraDetail({
                       />
                     </td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">
+                      <a
+                        href={`/obras/${budget.id}/fatura/${p.id}`}
+                        target="_blank"
+                        className="text-slate-500 hover:underline mr-3"
+                      >
+                        PDF
+                      </a>
                       {p.status === "PENDING" && (
                         <button onClick={() => startTransition(() => setBillingPhaseStatusAction(budget.id, p.id, "INVOICED"))} className="text-blue-600 hover:underline">
                           Faturar

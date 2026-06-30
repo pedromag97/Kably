@@ -126,6 +126,12 @@ identificadores de código em inglês.
   recebido (pago), por receber (faturado−pago), por faturar. A lista `/obras`
   mostra **por receber** por obra + total. Integração com software de faturação
   certificado (Moloni/InvoiceXpress) fica para quando o Pedro tiver conta.
+- **Tesouraria no Painel + PDF de auto de medição:** o `/painel` tem um bloco
+  "Tesouraria das obras" (por receber / por faturar / recebido + lista das obras
+  com valor por receber), calculado sobre as `billing_phases`. Cada fase de
+  faturação tem um **PDF de auto de medição** (`/obras/[id]/fatura/[phase]`,
+  `AutoMedicaoPdf` em `pdf.tsx`) com cabeçalho da empresa, cliente, obra e a
+  parcela com decomposição s/IVA + IVA + total (não substitui fatura certificada).
 
 ## Mapa do código
 

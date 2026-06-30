@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCompany, listBudgetsFull } from "@/lib/db";
+import { getCompany, listBudgetsFull, listBillingPhasesForCompany } from "@/lib/db";
 import { budgetTotals, eur } from "@/lib/calc";
 import { requireUser } from "@/lib/session";
 import type { BudgetFull } from "@/lib/types";
@@ -39,11 +39,43 @@ export default async function PainelPage({
   const { periodo } = await searchParams;
   const period = (["mes", "tri", "ano", "tudo"].includes(periodo ?? "") ? periodo : "mes") as Period;
 
-  const [company, budgets] = await Promise.all([
+  const [company, budgets, phases] = await Promise.all([
     getCompany(user.companyId),
     listBudgetsFull(user.companyId),
+    listBillingPhasesForCompany(user.companyId),
   ]);
   const followUpDays = company.followUpDays || 5;
+
+  // ── Tesouraria das obras (faturação) ────────────────────────────────
+  const phasesByBudget = new Map<number, typeof phases>();
+  for (const p of phases) {
+    const arr = phasesByBudget.get(p.budgetId) ?? [];
+    arr.push(p);
+    phasesByBudget.set(p.budgetId, arr);
+  }
+  const phaseValue = (p: (typeof phases)[number], totalCIva: number) =>
+    p.mode === "FIXED" ? p.amount : (totalCIva * p.pct) / 100;
+
+  let toReceive = 0;
+  let toBill = 0;
+  let received = 0;
+  const obrasToReceive: { id: number; number: string; client: string; amount: number }[] = [];
+  for (const b of budgets) {
+    if (b.status !== "ACCEPTED") continue;
+    const totalCIva = budgetTotals(b).total;
+    const ph = phasesByBudget.get(b.id) ?? [];
+    const billed = ph.filter((p) => p.status === "INVOICED" || p.status === "PAID").reduce((s, p) => s + phaseValue(p, totalCIva), 0);
+    const paid = ph.filter((p) => p.status === "PAID").reduce((s, p) => s + phaseValue(p, totalCIva), 0);
+    const obraToReceive = billed - paid;
+    toReceive += obraToReceive;
+    received += paid;
+    toBill += Math.max(0, totalCIva - billed);
+    if (obraToReceive > 0.005) {
+      obrasToReceive.push({ id: b.id, number: b.number, client: b.clientName || "Sem cliente", amount: obraToReceive });
+    }
+  }
+  obrasToReceive.sort((a, b) => b.amount - a.amount);
+  const hasTreasury = phases.length > 0;
 
   const withTotal = budgets.map((b: BudgetFull) => ({
     b,
@@ -112,6 +144,36 @@ export default async function PainelPage({
         <Stat label="Pipeline (por decidir)" value={eur(pipeline)} tone="blue" big />
         <Stat label="Valor médio" value={eur(avg)} big />
       </div>
+
+      {/* Tesouraria das obras */}
+      {hasTreasury && (
+        <section className="mb-6">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="font-semibold">Tesouraria das obras</h2>
+            <Link href="/obras" className="text-sm text-blue-600 hover:underline">
+              ver obras
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Stat label="Por receber" value={eur(toReceive)} tone="blue" big />
+            <Stat label="Por faturar" value={eur(toBill)} big />
+            <Stat label="Recebido (obras)" value={eur(received)} tone="green" big />
+          </div>
+          {obrasToReceive.length > 0 && (
+            <ul className="mt-3 bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+              {obrasToReceive.slice(0, 5).map((o) => (
+                <li key={o.id} className="px-4 py-2.5 flex items-center gap-2 text-sm">
+                  <Link href={`/obras/${o.id}`} className="flex-1 min-w-0">
+                    <span className="font-medium">{o.client}</span>
+                    <span className="text-slate-400"> · {o.number}</span>
+                  </Link>
+                  <span className="text-blue-700 font-medium whitespace-nowrap">{eur(o.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {/* Follow-up */}
