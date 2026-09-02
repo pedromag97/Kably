@@ -134,7 +134,7 @@ assume para cada tarefa. **É isto que deves pôr na coluna "MO h/un" do Kably.*
 | R3x50+2G25 mm² | 8,64 €/m | **0,576** | 34,6 min/m |
 | R3x70+2G35 mm² | 11,00 €/m | **0,733** | 44,0 min/m |
 
-> 🔴 **A maior linha do contrato: enfiar fio pré-cablado.**
+> 🔴 **A maior linha do contrato: tubo pré-cablado.**
 >
 > | | |
 > |---|---:|
@@ -143,18 +143,30 @@ assume para cada tarefa. **É isto que deves pôr na coluna "MO h/un" do Kably.*
 > | Peso no contrato | **21 %** |
 > | Horas implícitas (0,080 h/m) | **926 h** (também 21 % do total) |
 >
-> **A inversão a reter:** o fio H07V é material *mais barato* que o cabo XV, mas
-> custa **67 % mais em mão de obra** (1,20 vs 0,72 €/m). Enfiar fio em tubo
-> embebido na laje é lento e arriscado — o tubo pode ter ficado esmagado ou
-> obstruído na betonagem, as curvas estão fixas, e quando não passa é picar,
-> reparar e voltar a enfiar. Esse risco está no preço.
+> **O que é:** no Arco Living o fio vem **já dentro do tubo, de fábrica** — é um
+> produto único, assente de uma vez. **Não há operação de enfiar fio.** Isto
+> resolve o enigma das quantidades: os 1.057 m de tubo Ø20 são tubo *vazio* (para
+> o cabo XV, 1:1), e os 11.570 m de pré-cablado são um produto diferente, que não
+> precisa de linha de tubo separada.
 >
-> ➜ **Em mão de obra, o material mais barato pode dar o trabalho mais caro.**
-> Nunca deduzas o preço da mão de obra a partir do preço do material.
+> **Assentar pré-cablado custa 1,7× mais do que assentar tubo vazio:**
 >
-> ⚠️ A tua base não tem artigo para esta atividade. O mais próximo (*Cabo XV
-> 3G1,5*, 0,040 h/m) é **metade** do necessário. **Cria um artigo próprio:
-> "Enfiar fio pré-cablado em tubo — 0,080 h/m".**
+> | Trabalho | €/m | h/m |
+> |---|---:|---:|
+> | Tubo vazio embebido | 0,70 | 0,047 |
+> | **Tubo pré-cablado embebido** | **1,20** | **0,080** |
+>
+> Porquê mais: é mais pesado e rígido, não pode ser vincado (danificaria os
+> condutores), obriga a gerir e proteger as pontas nas duas extremidades, e a
+> identificar circuitos.
+>
+> ➜ **A lógica comercial:** o empreiteiro paga 1,20 €/m para eliminar por completo
+> a enfiação depois da betonagem — que é a operação arriscada (tubo esmagado ou
+> obstruído, que obriga a picar e reparar). Uma operação em vez de duas, e sem
+> risco pós-betonagem.
+>
+> ⚠️ **Este contrato não tem preço para "enfiar fio"** — essa operação não existe
+> aqui. Não uses estes 0,080 h/m para orçamentar enfiação em obra tradicional.
 
 ### Quadros e equipamento
 | Trabalho | Preço | **h/un** | ≈ tempo |
