@@ -98,6 +98,28 @@ assume para cada tarefa. **É isto que deves pôr na coluna "MO h/un" do Kably.*
 | Tubo VD Ø20 / Ø25 mm | 0,70 €/m | **0,047** | 2,8 min/m |
 | Tubo VD Ø40 / Ø50 / Ø63 mm | 0,86 €/m | **0,057** | 3,4 min/m |
 
+> ⚠️ **Atenção ao método de instalação — é aqui que se perde dinheiro.**
+>
+> O contrato junta três métodos no mesmo preço: *"com fixação por braçadeiras ou
+> instalado em roço (incluindo abertura e tapamento), ou embebido no betão"*.
+> Mas os tempos são radicalmente diferentes:
+>
+> | Método | Tempo real | Tudo incluído | **h/m** |
+> |---|---:|---:|---:|
+> | **Embebido na laje** (Arco Living) | ~1,0–1,5 min/m | ~2,8 min/m | **0,047** |
+> | Braçadeiras / teto falso / à vista | ~2–3 min/m | ~4–5 min/m | **0,070** |
+> | **Em roço** (abrir + tubo + tapar) | ~7–9 min/m | ~12–15 min/m | **0,220** |
+>
+> **O roço leva 4–5× mais tempo que o embebido.** No Arco Living a cláusula é
+> inofensiva porque, sendo construção nova, quase tudo vai embebido. **Numa
+> remodelação seria ruinosa:** venderias 0,22 h/m ao preço de 0,047 h/m — cerca de
+> 3,50 € de prejuízo por metro.
+>
+> Sempre que vires "ou em roço, ou embebido" ao mesmo preço, **pergunta qual é a
+> proporção de cada um antes de assinar.**
+>
+> **Na base de artigos, usa três artigos distintos de tubo, um por método.**
+
 ### Cabos
 | Trabalho | Preço | **h/un** | ≈ tempo |
 |---|---:|---:|---:|
