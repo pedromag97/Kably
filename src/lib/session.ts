@@ -1,7 +1,7 @@
 // Autenticação por sessão (servidor). Hashing com bcrypt; sessão guardada na
 // BD com token aleatório em cookie httpOnly. Usado em páginas/ações (runtime
 // Node) — NÃO no proxy (edge), que faz só a verificação grosseira do cookie.
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -20,6 +20,15 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
+/** O cookie só leva `Secure` se o pedido chegou mesmo por HTTPS. No Railway o
+ *  proxy envia x-forwarded-proto=https; na rede local (http://192.168.x.x) um
+ *  cookie Secure seria descartado pelo browser e o login ficava em ciclo. */
+async function isHttpsRequest(): Promise<boolean> {
+  const proto = (await headers()).get("x-forwarded-proto")?.split(",")[0].trim();
+  if (proto) return proto === "https";
+  return process.env.NODE_ENV === "production";
+}
+
 export async function startSession(userId: number): Promise<void> {
   const id = crypto.randomBytes(32).toString("hex");
   await store.createSession(id, userId, MAX_AGE_DAYS);
@@ -27,7 +36,7 @@ export async function startSession(userId: number): Promise<void> {
   jar.set(SESSION_COOKIE, id, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await isHttpsRequest(),
     maxAge: MAX_AGE_S,
     path: "/",
   });
