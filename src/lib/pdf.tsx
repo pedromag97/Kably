@@ -202,6 +202,23 @@ export function BudgetPdf({
           </Text>
         ) : null}
 
+        {budget.materialOnly === 1 ? (
+          <Text
+            style={{
+              fontSize: 8.5,
+              backgroundColor: "#e0f2fe",
+              color: "#075985",
+              padding: 6,
+              borderRadius: 3,
+              marginBottom: 10,
+              marginTop: -4,
+            }}
+          >
+            Orçamento de fornecimento de material — a montagem e instalação não
+            estão incluídas, salvo indicação em contrário nas condições.
+          </Text>
+        ) : null}
+
         {/* Capítulos */}
         {budget.chapters
           .filter((ch) => ch.items.length > 0)
@@ -269,8 +286,13 @@ export function BudgetPdf({
               <View style={s.totalsRow}>
                 <Text style={s.small}>
                   Custo mão de obra ({qty(totals.laborHours)} h × {fmt(budget.laborRate)}/h)
+                  {budget.materialOnly === 1 ? " — não faturada" : ""}
                 </Text>
-                <Text style={s.small}>{fmt(totals.laborCost)}</Text>
+                <Text style={s.small}>
+                  {fmt(
+                    budget.materialOnly === 1 ? totals.unbilledLabor : totals.laborCost
+                  )}
+                </Text>
               </View>
               <View style={s.totalsRow}>
                 <Text style={[s.small, { fontFamily: "Helvetica-Bold" }]}>

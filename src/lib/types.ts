@@ -115,6 +115,7 @@ export type Budget = {
   laborRate: number;
   validityDays: number;
   laborOnly: number; // 1 = só mão de obra (material fornecido pelo cliente)
+  materialOnly: number; // 1 = só fornecimento de material (montagem não faturada)
   materialFeePct: number; // % de gestão sobre o material fornecido (só-MO)
   notes: string;
   revisionOf: number | null; // id do orçamento base (null se for original)

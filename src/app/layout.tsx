@@ -38,6 +38,7 @@ export default async function RootLayout({
     { href: "/obras", label: "Obras" },
     { href: "/clientes", label: "Clientes" },
     { href: "/artigos", label: "Artigos" },
+    { href: "/tempos", label: "Tempos" },
     { href: "/fornecedores", label: "Fornecedores" },
     ...(user?.role === "owner"
       ? [

@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   laborRate REAL NOT NULL DEFAULT 20,
   validityDays INTEGER NOT NULL DEFAULT 30,
   laborOnly INTEGER NOT NULL DEFAULT 0,
+  materialOnly INTEGER NOT NULL DEFAULT 0,
   materialFeePct REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
   revisionOf INTEGER,
@@ -307,6 +308,7 @@ async function migrate(c: DbClient) {
     if (!has) await c.execute(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   };
   await addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
+  await addColumn("budgets", "materialOnly", "materialOnly INTEGER NOT NULL DEFAULT 0");
   await addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
   await addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
   await addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
@@ -616,7 +618,7 @@ export async function createBudget(
     Budget,
     | "title" | "clientName" | "clientNif" | "clientEmail" | "clientPhone"
     | "siteAddress" | "vatMode"
-  > & { clientId?: number | null },
+  > & { clientId?: number | null } & Partial<Pick<Budget, "laborOnly" | "materialOnly">>,
   chapterNames: string[]
 ): Promise<number> {
   const c = await db();
@@ -624,11 +626,13 @@ export async function createBudget(
   const number = await nextBudgetNumber(c, companyId);
   const r = await c.execute({
     sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif, clientEmail,
-       clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate, validityDays)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       clientPhone, siteAddress, vatMode, laborOnly, materialOnly,
+       materialMargin, laborMargin, laborRate, validityDays)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     args: [
       companyId, number, data.title, data.clientId ?? null, data.clientName, data.clientNif,
-      data.clientEmail, data.clientPhone, data.siteAddress, data.vatMode, company.materialMargin,
+      data.clientEmail, data.clientPhone, data.siteAddress, data.vatMode,
+      data.laborOnly ?? 0, data.materialOnly ?? 0, company.materialMargin,
       company.laborMargin, company.laborRate, company.validityDays,
     ],
   });
@@ -654,7 +658,7 @@ export async function updateBudget(
   const allowed = [
     "title", "clientId", "clientName", "clientNif", "clientEmail", "clientPhone", "siteAddress",
     "vatMode", "materialMargin", "laborMargin", "laborRate", "validityDays",
-    "laborOnly", "materialFeePct", "notes",
+    "laborOnly", "materialOnly", "materialFeePct", "notes",
   ] as const;
   const keys = allowed.filter((k) => fields[k] !== undefined);
   if (keys.length === 0) return;
@@ -1319,13 +1323,13 @@ export async function duplicateBudget(
   const r = await c.execute({
     sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif,
        clientEmail, clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate,
-       validityDays, laborOnly, materialFeePct, notes)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       validityDays, laborOnly, materialOnly, materialFeePct, notes)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     args: [
       companyId, number, `${src.title} (cópia)`, src.clientId ?? null, src.clientName,
       src.clientNif, src.clientEmail, src.clientPhone, src.siteAddress, src.vatMode,
       src.materialMargin, src.laborMargin, src.laborRate, src.validityDays, src.laborOnly,
-      src.materialFeePct, src.notes,
+      src.materialOnly, src.materialFeePct, src.notes,
     ],
   });
   const newId = Number(r.lastInsertRowid);
@@ -1366,13 +1370,13 @@ export async function createRevision(
   const r = await c.execute({
     sql: `INSERT INTO budgets (companyId, number, title, clientId, clientName, clientNif,
        clientEmail, clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate,
-       validityDays, laborOnly, materialFeePct, notes, revisionOf)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       validityDays, laborOnly, materialOnly, materialFeePct, notes, revisionOf)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     args: [
       companyId, number, src.title, src.clientId ?? null, src.clientName, src.clientNif,
       src.clientEmail, src.clientPhone, src.siteAddress, src.vatMode, src.materialMargin,
-      src.laborMargin, src.laborRate, src.validityDays, src.laborOnly, src.materialFeePct,
-      src.notes, rootId,
+      src.laborMargin, src.laborRate, src.validityDays, src.laborOnly, src.materialOnly,
+      src.materialFeePct, src.notes, rootId,
     ],
   });
   const newId = Number(r.lastInsertRowid);

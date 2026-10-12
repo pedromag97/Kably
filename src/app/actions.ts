@@ -64,6 +64,14 @@ async function resolveClientId(companyId: number, fd: FormData): Promise<number 
   });
 }
 
+/** "BOTH" | "LABOR" | "MATERIAL" → os dois sinalizadores guardados na BD. */
+function scopeFlags(scope: string): { laborOnly: number; materialOnly: number } {
+  return {
+    laborOnly: scope === "LABOR" ? 1 : 0,
+    materialOnly: scope === "MATERIAL" ? 1 : 0,
+  };
+}
+
 export async function createBudgetAction(fd: FormData) {
   const user = await requireUser();
   const clientId = await resolveClientId(user.companyId, fd);
@@ -78,6 +86,7 @@ export async function createBudgetAction(fd: FormData) {
       clientPhone: str(fd, "clientPhone"),
       siteAddress: str(fd, "siteAddress"),
       vatMode: (str(fd, "vatMode") || "NORMAL") as VatMode,
+      ...scopeFlags(str(fd, "scope")),
     },
     DEFAULT_CHAPTERS
   );
@@ -219,7 +228,7 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
     laborMargin: flt(fd, "laborMargin", 35),
     laborRate: flt(fd, "laborRate", 20),
     validityDays: Math.round(flt(fd, "validityDays", 30)),
-    laborOnly: fd.get("laborOnly") ? 1 : 0,
+    ...scopeFlags(str(fd, "scope")),
     materialFeePct: flt(fd, "materialFeePct", 0),
     notes: String(fd.get("notes") ?? ""),
   });
@@ -392,7 +401,7 @@ export type ImportMeta = {
   title: string;
   clientName: string;
   vatMode: VatMode;
-  laborOnly: boolean;
+  scope: "BOTH" | "LABOR" | "MATERIAL";
 };
 
 export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
@@ -411,13 +420,11 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
       clientPhone: "",
       siteAddress: "",
       vatMode: meta.vatMode || "NORMAL",
+      ...scopeFlags(meta.scope),
     },
     []
   );
-  if (meta.laborOnly) {
-    await store.updateBudget(companyId, budgetId, { laborOnly: 1 });
-  }
-
+  // Resolver cada linha num item + capítulo de destino
   const resolved: {
     chapter: string;
     item: {
