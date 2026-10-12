@@ -73,7 +73,7 @@ export default function MqtImporter({
   const [title, setTitle] = useState("");
   const [clientName, setClientName] = useState("");
   const [vatMode, setVatMode] = useState<VatMode>("NORMAL");
-  const [laborOnly, setLaborOnly] = useState(false);
+  const [scope, setScope] = useState<"BOTH" | "LABOR" | "MATERIAL">("BOTH");
 
   const aliasMap = useMemo(
     () => new Map(aliases.map((a) => [a.normText, a.articleId])),
@@ -263,7 +263,11 @@ export default function MqtImporter({
         materialIncluded: 0,
         position: 0,
       },
-      { ...company, laborOnly: laborOnly ? 1 : 0 }
+      {
+        ...company,
+        laborOnly: scope === "LABOR" ? 1 : 0,
+        materialOnly: scope === "MATERIAL" ? 1 : 0,
+      }
     );
     return eur(t.price);
   }
@@ -287,7 +291,7 @@ export default function MqtImporter({
         choice: l.choice,
       }));
     startTransition(() =>
-      importMqtAction({ title, clientName, vatMode, laborOnly }, payload)
+      importMqtAction({ title, clientName, vatMode, scope }, payload)
     );
   }
 
@@ -594,25 +598,24 @@ export default function MqtImporter({
             </select>
           </label>
           <fieldset className="grid gap-2 text-sm font-medium">
-            Tipo de orçamento
-            <label className="flex items-center gap-2 font-normal">
-              <input
-                type="radio"
-                name="tipoOrcamento"
-                checked={!laborOnly}
-                onChange={() => setLaborOnly(false)}
-              />
-              Completo — material + mão de obra
-            </label>
-            <label className="flex items-center gap-2 font-normal">
-              <input
-                type="radio"
-                name="tipoOrcamento"
-                checked={laborOnly}
-                onChange={() => setLaborOnly(true)}
-              />
-              Só mão de obra — material fornecido pelo cliente
-            </label>
+            O que vais faturar?
+            {(
+              [
+                ["BOTH", "Material + mão de obra"],
+                ["LABOR", "Só mão de obra — material fornecido pelo cliente"],
+                ["MATERIAL", "Só material — montagem a cargo de outrem"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className="flex items-center gap-2 font-normal">
+                <input
+                  type="radio"
+                  name="tipoOrcamento"
+                  checked={scope === value}
+                  onChange={() => setScope(value)}
+                />
+                {label}
+              </label>
+            ))}
           </fieldset>
           <div className="flex gap-3">
             <button

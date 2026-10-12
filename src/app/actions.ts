@@ -17,6 +17,14 @@ function flt(fd: FormData, key: string, fallback = 0): number {
 
 // ── Orçamentos ────────────────────────────────────────────────────────
 
+/** "BOTH" | "LABOR" | "MATERIAL" → os dois sinalizadores guardados na BD. */
+function scopeFlags(scope: string): { laborOnly: number; materialOnly: number } {
+  return {
+    laborOnly: scope === "LABOR" ? 1 : 0,
+    materialOnly: scope === "MATERIAL" ? 1 : 0,
+  };
+}
+
 export async function createBudgetAction(fd: FormData) {
   const id = store.createBudget(
     {
@@ -27,6 +35,7 @@ export async function createBudgetAction(fd: FormData) {
       clientPhone: str(fd, "clientPhone"),
       siteAddress: str(fd, "siteAddress"),
       vatMode: (str(fd, "vatMode") || "NORMAL") as VatMode,
+      ...scopeFlags(str(fd, "scope")),
     },
     DEFAULT_CHAPTERS
   );
@@ -47,7 +56,7 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
     laborMargin: flt(fd, "laborMargin", 35),
     laborRate: flt(fd, "laborRate", 20),
     validityDays: Math.round(flt(fd, "validityDays", 30)),
-    laborOnly: fd.get("laborOnly") ? 1 : 0,
+    ...scopeFlags(str(fd, "scope")),
     materialFeePct: flt(fd, "materialFeePct", 0),
     notes: String(fd.get("notes") ?? ""),
   });
@@ -149,7 +158,7 @@ export type ImportMeta = {
   title: string;
   clientName: string;
   vatMode: VatMode;
-  laborOnly: boolean; // só mão de obra — material fornecido pelo cliente
+  scope: "BOTH" | "LABOR" | "MATERIAL";
 };
 
 export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
@@ -165,13 +174,10 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
       clientPhone: "",
       siteAddress: "",
       vatMode: meta.vatMode || "NORMAL",
+      ...scopeFlags(meta.scope),
     },
     [] // capítulos criados abaixo, só os que têm itens
   );
-  if (meta.laborOnly) {
-    store.updateBudget(budgetId, { laborOnly: 1 });
-  }
-
   // Resolver cada linha num item + capítulo de destino
   const resolved: {
     chapter: string;

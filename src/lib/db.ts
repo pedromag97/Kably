@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   laborRate REAL NOT NULL DEFAULT 20,
   validityDays INTEGER NOT NULL DEFAULT 30,
   laborOnly INTEGER NOT NULL DEFAULT 0,
+  materialOnly INTEGER NOT NULL DEFAULT 0,
   materialFeePct REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
@@ -124,6 +125,7 @@ function migrate(conn: DatabaseSync) {
     }
   };
   addColumn("budgets", "laborOnly", "laborOnly INTEGER NOT NULL DEFAULT 0");
+  addColumn("budgets", "materialOnly", "materialOnly INTEGER NOT NULL DEFAULT 0");
   addColumn("budgets", "materialFeePct", "materialFeePct REAL NOT NULL DEFAULT 0");
   addColumn("budget_items", "materialIncluded", "materialIncluded INTEGER NOT NULL DEFAULT 0");
   addColumn("companies", "targetProfitPct", "targetProfitPct REAL NOT NULL DEFAULT 15");
@@ -372,15 +374,17 @@ export function createBudget(
     | "clientPhone"
     | "siteAddress"
     | "vatMode"
-  >,
+  > &
+    Partial<Pick<Budget, "laborOnly" | "materialOnly">>,
   chapterNames: string[]
 ): number {
   const c = getCompany();
   const r = db()
     .prepare(
       `INSERT INTO budgets (companyId, number, title, clientName, clientNif, clientEmail,
-       clientPhone, siteAddress, vatMode, materialMargin, laborMargin, laborRate, validityDays)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       clientPhone, siteAddress, vatMode, laborOnly, materialOnly,
+       materialMargin, laborMargin, laborRate, validityDays)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       c.id,
@@ -392,6 +396,8 @@ export function createBudget(
       data.clientPhone,
       data.siteAddress,
       data.vatMode,
+      data.laborOnly ?? 0,
+      data.materialOnly ?? 0,
       c.materialMargin,
       c.laborMargin,
       c.laborRate,
@@ -419,6 +425,7 @@ export function updateBudget(id: number, fields: Partial<Budget>): void {
     "laborRate",
     "validityDays",
     "laborOnly",
+    "materialOnly",
     "materialFeePct",
     "notes",
   ] as const;

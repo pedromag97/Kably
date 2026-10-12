@@ -2,7 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { Article } from "@/lib/types";
-import { eur } from "@/lib/calc";
+import {
+  eur,
+  invertRate,
+  laborFieldText,
+  minutesLabel,
+  perDayLabel,
+  perHourLabel,
+} from "@/lib/calc";
 import {
   createArticleAction,
   deleteArticleAction,
@@ -11,6 +18,62 @@ import {
 
 const inputCls =
   "border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
+
+function parseNum(v: string): number {
+  const n = parseFloat(v.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Mão de obra escrita de duas maneiras: horas por unidade, ou o inverso —
+ * quantas unidades se fazem numa hora (rendimento). Guarda sempre h/un.
+ */
+function LaborInput({ defaultHours }: { defaultHours: number }) {
+  const [mode, setMode] = useState<"H" | "R">("H");
+  // Valor exato à parte do texto: trocar de vista não pode alterar o guardado.
+  const [hours, setHours] = useState(defaultHours);
+  const [value, setValue] = useState(laborFieldText(defaultHours, "H"));
+
+  const switchMode = (next: "H" | "R") => {
+    if (next === mode) return;
+    setMode(next);
+    setValue(laborFieldText(hours, next));
+  };
+
+  const onValue = (text: string) => {
+    setValue(text);
+    const n = parseNum(text);
+    setHours(mode === "H" ? n : invertRate(n));
+  };
+
+  return (
+    <label className="grid gap-1 font-medium">
+      Mão de obra
+      <div className="flex gap-1">
+        <input
+          value={value}
+          onChange={(e) => onValue(e.target.value)}
+          inputMode="decimal"
+          className={inputCls}
+        />
+        <select
+          value={mode}
+          onChange={(e) => switchMode(e.target.value as "H" | "R")}
+          className={`${inputCls} w-auto shrink-0`}
+          title="Como queres escrever o tempo desta tarefa"
+        >
+          <option value="H">h / un</option>
+          <option value="R">un / hora</option>
+        </select>
+      </div>
+      <input type="hidden" name="laborHours" value={hours} />
+      <span className="text-xs font-normal text-slate-500">
+        = {minutesLabel(hours)} por unidade · {perHourLabel(hours)} por hora ·{" "}
+        {perDayLabel(hours)} por dia
+      </span>
+    </label>
+  );
+}
 
 function ArticleForm({
   article,
@@ -76,15 +139,7 @@ function ArticleForm({
             className={inputCls}
           />
         </label>
-        <label className="grid gap-1 font-medium">
-          Mão de obra (horas/un)
-          <input
-            name="laborHours"
-            inputMode="decimal"
-            defaultValue={article?.laborHours ?? 0}
-            className={inputCls}
-          />
-        </label>
+        <LaborInput defaultHours={article?.laborHours ?? 0} />
         <label className="grid gap-1 font-medium col-span-2">
           Código (opcional)
           <input name="code" defaultValue={article?.code} className={inputCls} />
@@ -170,6 +225,10 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
               <th className="px-2 py-2 font-medium text-center">Un</th>
               <th className="px-2 py-2 font-medium text-right">Material €</th>
               <th className="px-2 py-2 font-medium text-right">MO (h)</th>
+              <th className="px-2 py-2 font-medium text-right">≈ tempo</th>
+              <th className="px-2 py-2 font-medium text-right" title="Quantas unidades faz 1 pessoa num dia de 8 h">
+                /dia (8h)
+              </th>
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
@@ -181,6 +240,12 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
                 <td className="px-2 py-2 text-center text-slate-500">{a.unit}</td>
                 <td className="px-2 py-2 text-right">{eur(a.materialCost)}</td>
                 <td className="px-2 py-2 text-right">{a.laborHours}</td>
+                <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">
+                  {minutesLabel(a.laborHours)}
+                </td>
+                <td className="px-2 py-2 text-right text-slate-500">
+                  {perDayLabel(a.laborHours)}
+                </td>
                 <td className="px-2 py-2 text-right whitespace-nowrap">
                   <button
                     onClick={() => setEditing(a)}

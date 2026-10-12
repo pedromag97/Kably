@@ -1,9 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import type { Article, BudgetFull, BudgetItem } from "@/lib/types";
-import { budgetTotals, eur, itemTotals, num, VAT_MODES } from "@/lib/calc";
+import {
+  budgetTotals,
+  eur,
+  invertRate,
+  itemTotals,
+  laborFieldText,
+  num,
+  VAT_MODES,
+} from "@/lib/calc";
 import {
   addBlankItemAction,
   addChapterAction,
@@ -24,29 +40,63 @@ function parseNum(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Ids negativos para as linhas otimistas, até o servidor devolver o id real.
+let tempIdSeq = -1;
+function nextTempId(): number {
+  return tempIdSeq--;
+}
+
 // ── Linha de item ─────────────────────────────────────────────────────
 
-function ItemRow({
+const ItemRow = memo(function ItemRow({
   budget,
   item,
+  onDraft,
+  onRemove,
+  laborMode,
 }: {
   budget: BudgetFull;
   item: BudgetItem;
+  /** Reporta o valor em edição para o Resumo recalcular sem esperar pelo servidor. */
+  onDraft: (id: number, live: BudgetItem) => void;
+  onRemove: (id: number) => void;
+  /** "H" = horas por unidade · "R" = unidades por hora (rendimento). */
+  laborMode: "H" | "R";
 }) {
   const [, startTransition] = useTransition();
   const [name, setName] = useState(item.name);
   const [unit, setUnit] = useState(item.unit);
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [materialCost, setMaterialCost] = useState(String(item.materialCost));
-  const [laborHours, setLaborHours] = useState(String(item.laborHours));
+  // O valor exato (h/un) vive à parte do texto que se vê. Assim trocar de
+  // vista h/un ⇄ un/h nunca altera o preço por arredondamento.
+  const [hoursValue, setHoursValue] = useState(item.laborHours);
+  const [laborText, setLaborText] = useState(laborFieldText(item.laborHours, laborMode));
 
-  useEffect(() => {
+  // Re-sincroniza com o servidor sem effect (evita renders em cascata).
+  const [lastItem, setLastItem] = useState(item);
+  if (lastItem !== item) {
+    setLastItem(item);
     setName(item.name);
     setUnit(item.unit);
     setQuantity(String(item.quantity));
     setMaterialCost(String(item.materialCost));
-    setLaborHours(String(item.laborHours));
-  }, [item]);
+    setHoursValue(item.laborHours);
+    setLaborText(laborFieldText(item.laborHours, laborMode));
+  }
+
+  // Trocar de vista só reescreve o texto — o valor exato fica intacto.
+  const [lastMode, setLastMode] = useState(laborMode);
+  if (lastMode !== laborMode) {
+    setLastMode(laborMode);
+    setLaborText(laborFieldText(hoursValue, laborMode));
+  }
+
+  const setLabor = (text: string) => {
+    setLaborText(text);
+    const n = parseNum(text);
+    setHoursValue(laborMode === "H" ? n : invertRate(n));
+  };
 
   const live: BudgetItem = {
     ...item,
@@ -54,9 +104,27 @@ function ItemRow({
     unit,
     quantity: parseNum(quantity),
     materialCost: parseNum(materialCost),
-    laborHours: parseNum(laborHours),
+    laborHours: hoursValue,
   };
   const t = itemTotals(live, budget);
+
+  // Empurra o valor em edição para o pai, mas SÓ quando difere do servidor.
+  // Reportar ao montar faria N re-renders do editor (um por linha), cada um a
+  // recalcular o orçamento todo — O(n²) e a página a arrastar-se.
+  const hasDraft = useRef(false);
+  useEffect(() => {
+    const changed =
+      name !== item.name ||
+      unit !== item.unit ||
+      parseNum(quantity) !== item.quantity ||
+      parseNum(materialCost) !== item.materialCost ||
+      hoursValue !== item.laborHours;
+    if (changed || hasDraft.current) {
+      hasDraft.current = changed;
+      onDraft(item.id, live);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, unit, quantity, materialCost, hoursValue]);
 
   const save = () =>
     startTransition(() =>
@@ -100,16 +168,28 @@ function ItemRow({
       <td className="p-1.5 w-24">
         <div className="flex items-center gap-1">
           {budget.laborOnly === 1 && (
-            <input
-              type="checkbox"
-              checked={item.materialIncluded === 1}
-              onChange={(e) =>
-                startTransition(() =>
-                  setItemMaterialIncludedAction(budget.id, item.id, e.target.checked)
-                )
+            <label
+              className="flex items-center shrink-0 cursor-pointer"
+              title={
+                item.materialIncluded === 1
+                  ? "Esta linha FATURA o material (exceção ao modo só mão de obra). Desmarca para voltar a material do cliente."
+                  : "Material fornecido pelo cliente — não faturado. Marca para faturares o material nesta linha."
               }
-              title="Faturar material nesta linha (exceção ao modo só mão de obra)"
-            />
+            >
+              <input
+                type="checkbox"
+                checked={item.materialIncluded === 1}
+                onChange={(e) =>
+                  startTransition(() =>
+                    setItemMaterialIncludedAction(budget.id, item.id, e.target.checked)
+                  )
+                }
+                className="peer sr-only"
+              />
+              <span className="text-[10px] leading-none font-bold px-1 py-0.5 rounded border border-slate-300 text-slate-400 peer-checked:bg-emerald-600 peer-checked:border-emerald-600 peer-checked:text-white">
+                €
+              </span>
+            </label>
           )}
           <input
             value={materialCost}
@@ -129,11 +209,15 @@ function ItemRow({
       </td>
       <td className="p-1.5 w-20">
         <input
-          value={laborHours}
-          onChange={(e) => setLaborHours(e.target.value)}
+          value={laborText}
+          onChange={(e) => setLabor(e.target.value)}
           onBlur={save}
           inputMode="decimal"
-          title="Horas de mão de obra por unidade"
+          title={
+            laborMode === "H"
+              ? "Horas de mão de obra por unidade"
+              : "Unidades feitas numa hora (rendimento)"
+          }
           className={`${inputCls} text-right`}
         />
       </td>
@@ -145,7 +229,7 @@ function ItemRow({
       </td>
       <td className="p-1.5 w-8 text-center">
         <button
-          onClick={() => startTransition(() => deleteItemAction(budget.id, item.id))}
+          onClick={() => onRemove(item.id)}
           className="text-slate-300 hover:text-red-600"
           title="Remover item"
         >
@@ -154,84 +238,131 @@ function ItemRow({
       </td>
     </tr>
   );
-}
+});
 
-// ── Seletor de artigos ────────────────────────────────────────────────
+// ── Pesquisa de artigos (integrada no capítulo) ───────────────────────
 
-function ArticlePicker({
+/** Quantos resultados desenhar. Mais do que isto só atrasa a escrita. */
+const MAX_RESULTS = 8;
+
+function ArticleSearch({
   budget,
   articles,
   chapterId,
   onClose,
+  onOptimisticAdd,
 }: {
   budget: BudgetFull;
   articles: Article[];
   chapterId: number;
   onClose: () => void;
+  onOptimisticAdd: (item: BudgetItem) => void;
 }) {
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
-  const [qty, setQty] = useState("1");
+  const [count, setCount] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(
     () => Array.from(new Set(articles.map((a) => a.category))),
     [articles]
   );
 
-  const filtered = articles.filter(
-    (a) =>
-      (!category || a.category === category) &&
-      (!query || a.name.toLowerCase().includes(query.toLowerCase()))
-  );
+  // Limitar o que se desenha mantém a lista instantânea a cada tecla.
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const out: Article[] = [];
+    for (const a of articles) {
+      if (category && a.category !== category) continue;
+      if (q && !a.name.toLowerCase().includes(q)) continue;
+      out.push(a);
+      if (out.length === MAX_RESULTS) break;
+    }
+    return out;
+  }, [articles, category, query]);
 
-  const add = (a: Article) =>
-    startTransition(() =>
-      addItemFromArticleAction(budget.id, chapterId, a.id, parseNum(qty) || 1)
-    );
+  const active = Math.min(highlight, Math.max(results.length - 1, 0));
+
+  // Entra com quantidade 1; os detalhes editas na própria linha do orçamento.
+  const add = (a: Article) => {
+    onOptimisticAdd({
+      id: nextTempId(),
+      chapterId,
+      articleId: a.id,
+      name: a.name,
+      unit: a.unit,
+      quantity: 1,
+      materialCost: a.materialCost,
+      laborHours: a.laborHours,
+      materialIncluded: 0,
+      position: Number.MAX_SAFE_INTEGER,
+    });
+    setCount((c) => c + 1);
+    setQuery("");
+    setHighlight(0);
+    inputRef.current?.focus(); // pronto para o próximo, sem tirar as mãos do teclado
+    startTransition(() => addItemFromArticleAction(budget.id, chapterId, a.id, 1));
+  };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-30 flex items-start justify-center p-4 pt-16"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquisar artigo…"
-            className={inputCls}
-          />
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">Todas as categorias</option>
-            {categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <label className="text-sm flex items-center gap-1">
-            Qtd.
-            <input
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              inputMode="decimal"
-              className={`${inputCls} w-16 text-right`}
-            />
-          </label>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-800 px-2">
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto">
-          {filtered.map((a) => {
+    <div className="border-t-2 border-blue-500 bg-blue-50/40 p-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          autoFocus
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setHighlight(0);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHighlight((h) => Math.min(h + 1, results.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlight((h) => Math.max(h - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (results[active]) add(results[active]);
+            } else if (e.key === "Escape") {
+              onClose();
+            }
+          }}
+          placeholder="Escreve o material e carrega Enter…"
+          className={`${inputCls} flex-1 min-w-[12rem] bg-white`}
+        />
+        <select
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value);
+            setHighlight(0);
+          }}
+          className={`${inputCls} w-auto bg-white`}
+        >
+          <option value="">Todas as categorias</option>
+          {categories.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        {count > 0 && (
+          <span className="text-xs font-medium text-emerald-700 bg-emerald-100 rounded-full px-2.5 py-1">
+            ✓ {count} {count === 1 ? "linha" : "linhas"}
+          </span>
+        )}
+        <button
+          onClick={onClose}
+          className="text-sm text-slate-500 hover:bg-slate-200 rounded-md px-2.5 py-1"
+        >
+          Fechar
+        </button>
+      </div>
+
+      {results.length > 0 ? (
+        <ul className="mt-2 bg-white rounded-lg border border-slate-200 overflow-hidden">
+          {results.map((a, i) => {
             const t = itemTotals(
               {
                 ...a,
@@ -245,30 +376,37 @@ function ArticlePicker({
               budget
             );
             return (
-              <button
-                key={a.id}
-                onClick={() => add(a)}
-                className="w-full text-left px-4 py-2.5 border-b border-slate-100 hover:bg-blue-50 flex items-center gap-3"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{a.name}</div>
-                  <div className="text-xs text-slate-500">{a.category}</div>
-                </div>
-                <div className="text-xs text-slate-500">{a.unit}</div>
-                <div className="text-sm font-semibold w-24 text-right">
-                  {eur(t.unitPrice)}
-                </div>
-              </button>
+              <li key={a.id}>
+                <button
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={() => add(a)}
+                  className={`w-full text-left px-3 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 ${
+                    i === active ? "bg-blue-100" : "hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium truncate">{a.name}</span>
+                    <span className="block text-xs text-slate-500">{a.category}</span>
+                  </span>
+                  <span className="text-xs text-slate-500 shrink-0">{a.unit}</span>
+                  <span className="text-sm font-semibold w-20 text-right shrink-0">
+                    {eur(t.unitPrice)}
+                  </span>
+                </button>
+              </li>
             );
           })}
-          {filtered.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">
-              Sem resultados — podes criar o artigo em <strong>Artigos</strong> ou usar
-              uma linha em branco.
-            </p>
-          )}
-        </div>
-      </div>
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500 px-1">
+          Sem resultados — cria o artigo em <strong>Artigos</strong> ou usa uma linha
+          em branco.
+        </p>
+      )}
+      <p className="mt-1.5 text-xs text-slate-400 px-1">
+        ↑ ↓ para escolher · Enter adiciona · Esc fecha. Entra com quantidade 1 —
+        ajusta os detalhes na linha.
+      </p>
     </div>
   );
 }
@@ -282,9 +420,72 @@ export default function BudgetEditor({
   budget: BudgetFull;
   articles: Article[];
 }) {
-  const [, startTransition] = useTransition();
+  const [isSaving, startTransition] = useTransition();
   const [picker, setPicker] = useState<number | null>(null);
-  const totals = budgetTotals(budget);
+  // Como escreves a mão de obra: horas por unidade ou unidades por hora.
+  const [laborMode, setLaborMode] = useState<"H" | "R">("H");
+
+  // ── Camada "ao vivo" ────────────────────────────────────────────────
+  // O servidor continua a ser a verdade, mas o ecrã não espera por ele:
+  // `drafts` = valores a serem escritos, `removed`/`pendingAdds` = linhas otimistas.
+  const [drafts, setDrafts] = useState<Map<number, BudgetItem>>(new Map());
+  const [removed, setRemoved] = useState<Set<number>>(new Set());
+  const [pendingAdds, setPendingAdds] = useState<BudgetItem[]>([]);
+
+  // Chegaram dados frescos do servidor: a camada local já não é precisa.
+  // (padrão React de ajustar estado quando uma prop muda, sem effect)
+  const [lastServerBudget, setLastServerBudget] = useState(budget);
+  if (lastServerBudget !== budget) {
+    setLastServerBudget(budget);
+    if (drafts.size) setDrafts(new Map());
+    if (removed.size) setRemoved(new Set());
+    if (pendingAdds.length) setPendingAdds([]);
+  }
+
+  const setDraft = useCallback((id: number, live: BudgetItem) => {
+    setDrafts((prev) => new Map(prev).set(id, live));
+  }, []);
+
+  const removeItem = useCallback(
+    (id: number) => {
+      setRemoved((prev) => new Set(prev).add(id));
+      if (id < 0) return; // linha otimista ainda sem id no servidor
+      startTransition(() => deleteItemAction(budget.id, id));
+    },
+    [budget.id]
+  );
+
+  const addOptimistic = useCallback((item: BudgetItem) => {
+    setPendingAdds((prev) => [...prev, item]);
+  }, []);
+
+  // Lista visível: itens do servidor (identidade preservada, para não estragar
+  // o que estás a escrever) menos os removidos, mais os que estão a entrar.
+  const visibleChapters = useMemo(
+    () =>
+      budget.chapters.map((ch) => ({
+        ...ch,
+        items: [
+          ...ch.items.filter((i) => !removed.has(i.id)),
+          ...pendingAdds.filter((p) => p.chapterId === ch.id && !removed.has(p.id)),
+        ],
+      })),
+    [budget.chapters, removed, pendingAdds]
+  );
+
+  // Só para as contas: aplica por cima os valores em edição.
+  const liveBudget = useMemo<BudgetFull>(
+    () => ({
+      ...budget,
+      chapters: visibleChapters.map((ch) => ({
+        ...ch,
+        items: ch.items.map((i) => drafts.get(i.id) ?? i),
+      })),
+    }),
+    [budget, visibleChapters, drafts]
+  );
+
+  const totals = useMemo(() => budgetTotals(liveBudget), [liveBudget]);
   const vat = VAT_MODES[budget.vatMode];
 
   return (
@@ -302,7 +503,21 @@ export default function BudgetEditor({
             SÓ MÃO DE OBRA
           </span>
         )}
+        {budget.materialOnly === 1 && (
+          <span className="text-xs font-semibold bg-sky-100 text-sky-800 rounded px-2 py-1">
+            SÓ MATERIAL
+          </span>
+        )}
         <h1 className="text-xl font-bold flex-1 min-w-0 truncate">{budget.title}</h1>
+        {isSaving && (
+          <span
+            aria-live="polite"
+            className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-1 flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <span className="inline-block w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            A guardar…
+          </span>
+        )}
         <a
           href={`/orcamentos/${budget.id}/pdf?v=cliente`}
           target="_blank"
@@ -398,13 +613,23 @@ export default function BudgetEditor({
               className={inputCls}
             />
           </label>
-          <label className="flex items-center gap-2 font-medium col-span-2">
-            <input
-              type="checkbox"
-              name="laborOnly"
-              defaultChecked={budget.laborOnly === 1}
-            />
-            Só mão de obra (material fornecido pelo cliente)
+          <label className="grid gap-1 font-medium col-span-2">
+            O que é faturado
+            <select
+              name="scope"
+              defaultValue={
+                budget.laborOnly === 1
+                  ? "LABOR"
+                  : budget.materialOnly === 1
+                    ? "MATERIAL"
+                    : "BOTH"
+              }
+              className={inputCls}
+            >
+              <option value="BOTH">Material + mão de obra</option>
+              <option value="LABOR">Só mão de obra (material do cliente)</option>
+              <option value="MATERIAL">Só material (montagem de outrem)</option>
+            </select>
           </label>
           <label className="grid gap-1 font-medium">
             Taxa gestão material (%)
@@ -434,7 +659,7 @@ export default function BudgetEditor({
       <div className="grid lg:grid-cols-[1fr_260px] gap-5 items-start">
         {/* Capítulos */}
         <div className="grid gap-4 min-w-0">
-          {budget.chapters.map((ch) => {
+          {visibleChapters.map((ch) => {
             const chT = totals.byChapter.get(ch.id);
             return (
               <section
@@ -477,8 +702,27 @@ export default function BudgetEditor({
                         <th className="px-3 pt-2 font-medium">Designação</th>
                         <th className="px-1 pt-2 font-medium text-center">Un</th>
                         <th className="px-1 pt-2 font-medium text-right">Qtd</th>
-                        <th className="px-1 pt-2 font-medium text-right">Mat. €/un</th>
-                        <th className="px-1 pt-2 font-medium text-right">MO h/un</th>
+                        <th className="px-1 pt-2 font-medium text-right">
+                          {budget.laborOnly === 1 ? (
+                            <span title="Marca o € para faturares o material desta linha">
+                              <span className="text-emerald-600">€</span> = faturar ·
+                              Mat. €/un
+                            </span>
+                          ) : (
+                            "Mat. €/un"
+                          )}
+                        </th>
+                        <th className="px-1 pt-2 font-medium text-right">
+                          <button
+                            onClick={() =>
+                              setLaborMode((m) => (m === "H" ? "R" : "H"))
+                            }
+                            className="hover:text-blue-600 underline decoration-dotted underline-offset-2"
+                            title="Trocar entre horas por unidade e unidades por hora (rendimento)"
+                          >
+                            {laborMode === "H" ? "MO h/un" : "MO un/h"} ⇄
+                          </button>
+                        </th>
                         <th className="px-1 pt-2 font-medium text-right">P. Unit.</th>
                         <th className="px-1 pt-2 font-medium text-right">Total</th>
                         <th></th>
@@ -486,23 +730,56 @@ export default function BudgetEditor({
                     </thead>
                     <tbody>
                       {ch.items.map((item) => (
-                        <ItemRow key={item.id} budget={budget} item={item} />
+                        <ItemRow
+                          key={item.id}
+                          budget={budget}
+                          item={item}
+                          onDraft={setDraft}
+                          onRemove={removeItem}
+                          laborMode={laborMode}
+                        />
                       ))}
                     </tbody>
                   </table>
                 )}
 
+                {picker === ch.id && (
+                  <ArticleSearch
+                    budget={budget}
+                    articles={articles}
+                    chapterId={ch.id}
+                    onClose={() => setPicker(null)}
+                    onOptimisticAdd={addOptimistic}
+                  />
+                )}
+
                 <div className="flex gap-2 p-2.5">
                   <button
-                    onClick={() => setPicker(ch.id)}
-                    className="text-sm text-blue-600 hover:bg-blue-50 px-2.5 py-1 rounded-md font-medium"
+                    onClick={() => setPicker(picker === ch.id ? null : ch.id)}
+                    className={`text-sm px-2.5 py-1 rounded-md font-medium ${
+                      picker === ch.id
+                        ? "bg-blue-600 text-white"
+                        : "text-blue-600 hover:bg-blue-50"
+                    }`}
                   >
                     + Da base de artigos
                   </button>
                   <button
-                    onClick={() =>
-                      startTransition(() => addBlankItemAction(budget.id, ch.id))
-                    }
+                    onClick={() => {
+                      addOptimistic({
+                        id: nextTempId(),
+                        chapterId: ch.id,
+                        articleId: null,
+                        name: "",
+                        unit: "un",
+                        quantity: 1,
+                        materialCost: 0,
+                        laborHours: 0,
+                        materialIncluded: 0,
+                        position: Number.MAX_SAFE_INTEGER,
+                      });
+                      startTransition(() => addBlankItemAction(budget.id, ch.id));
+                    }}
                     className="text-sm text-slate-500 hover:bg-slate-100 px-2.5 py-1 rounded-md"
                   >
                     + Linha em branco
@@ -535,13 +812,26 @@ export default function BudgetEditor({
               )}
             </div>
           )}
+          {budget.materialOnly === 1 && (
+            <div className="text-xs bg-sky-50 text-sky-800 rounded-md px-2 py-1.5 -mt-1">
+              Só material — montagem não faturada
+              {totals.unbilledLabor > 0 && (
+                <> (estimativa: {eur(totals.unbilledLabor)})</>
+              )}
+            </div>
+          )}
           <div className="flex justify-between text-slate-500">
             <span>Custo material{budget.laborOnly === 1 ? " (faturado)" : ""}</span>
             <span>{eur(totals.materialCost)}</span>
           </div>
           <div className="flex justify-between text-slate-500">
-            <span>Custo mão de obra ({num(totals.laborHours)} h)</span>
-            <span>{eur(totals.laborCost)}</span>
+            <span>
+              Custo mão de obra ({num(totals.laborHours)} h)
+              {budget.materialOnly === 1 && " — não faturada"}
+            </span>
+            <span className={budget.materialOnly === 1 ? "line-through opacity-50" : ""}>
+              {eur(budget.materialOnly === 1 ? totals.unbilledLabor : totals.laborCost)}
+            </span>
           </div>
           {totals.materialFee > 0 && (
             <div className="flex justify-between text-slate-500">
@@ -575,14 +865,8 @@ export default function BudgetEditor({
         </aside>
       </div>
 
-      {picker !== null && (
-        <ArticlePicker
-          budget={budget}
-          articles={articles}
-          chapterId={picker}
-          onClose={() => setPicker(null)}
-        />
-      )}
     </div>
   );
 }
+
+
