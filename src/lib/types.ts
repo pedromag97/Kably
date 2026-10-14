@@ -13,6 +13,7 @@ export type Company = {
   conditions: string;
   targetProfitPct: number; // lucro-alvo usado na página de custos
   followUpDays: number; // dias sem resposta antes de sinalizar follow-up
+  crewSize: number; // equipa por defeito dos orçamentos novos (1 = por homem)
 };
 
 export type Client = {
@@ -116,6 +117,9 @@ export type Budget = {
   validityDays: number;
   laborOnly: number; // 1 = só mão de obra (material fornecido pelo cliente)
   materialOnly: number; // 1 = só fornecimento de material (montagem não faturada)
+  // Pessoas na equipa deste orçamento (1 = por homem). Só muda a forma de
+  // escrever/ler a MO: horas guardam-se em horas-homem, taxa em €/hora por pessoa.
+  crewSize: number;
   materialFeePct: number; // % de gestão sobre o material fornecido (só-MO)
   notes: string;
   revisionOf: number | null; // id do orçamento base (null se for original)

@@ -149,11 +149,19 @@ export function invertRate(v: number): number {
  * O valor exato (h/un) guarda-se à parte — trocar de vista nunca deve
  * alterar o preço por arredondamento do ida-e-volta.
  */
-export function laborFieldText(hours: number, mode: "H" | "R"): string {
+export function laborFieldText(hours: number, mode: "H" | "R", crew = 1): string {
   if (!hours) return mode === "H" ? String(hours) : "";
+  // `hours` são sempre horas-HOMEM; com equipa mostra-se o tempo de relógio da equipa.
+  const teamHours = hours / crew;
   return mode === "H"
-    ? String(hours)
-    : String(Math.round(invertRate(hours) * 10000) / 10000);
+    ? String(Math.round(teamHours * 10000) / 10000)
+    : String(Math.round(invertRate(teamHours) * 10000) / 10000);
+}
+
+/** Inverso de `laborFieldText`: o número escrito no campo → horas-homem por unidade. */
+export function laborFromField(n: number, mode: "H" | "R", crew = 1): number {
+  const teamHours = mode === "H" ? n : invertRate(n);
+  return teamHours * crew;
 }
 
 /** Unidades por hora, ex.: 0,25 h/un → "4 un/h". */

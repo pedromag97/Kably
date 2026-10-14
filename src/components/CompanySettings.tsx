@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { Company } from "@/lib/types";
 import { saveCompanyAction } from "@/app/actions";
+import CrewRateFields from "@/components/CrewRateFields";
 
 const inputCls =
   "border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
@@ -34,7 +35,7 @@ export default function CompanySettings({ company }: { company: Company }) {
             setTimeout(() => setSaved(false), 2500);
           })
         }
-        className="bg-white rounded-xl border border-slate-200 p-6 grid grid-cols-2 gap-4 text-sm"
+        className="bg-white rounded-xl border border-slate-200 p-6 grid grid-cols-2 gap-4 items-start text-sm"
       >
         <label className="grid gap-1 font-medium col-span-2">
           Nome da empresa *
@@ -113,15 +114,20 @@ export default function CompanySettings({ company }: { company: Company }) {
             className={inputCls}
           />
         </label>
-        <label className="grid gap-1 font-medium">
-          Mão de obra (€/hora)
-          <input
-            name="laborRate"
-            inputMode="decimal"
-            defaultValue={company.laborRate}
-            className={inputCls}
-          />
-        </label>
+        <CrewRateFields
+          // o React 19 repõe o formulário depois de guardar: recriar com os valores gravados
+          key={`${company.crewSize}|${company.laborRate}`}
+          crewSize={company.crewSize ?? 1}
+          laborRate={company.laborRate}
+          selectable
+          selectLabel="Equipa por defeito (orçamentos novos)"
+          inputClassName={inputCls}
+        />
+        <p className="col-span-2 -mt-1 text-xs text-slate-500">
+          Cada orçamento pode mudar isto nas suas definições. «Por equipa»: os tempos passam a
+          ser o tempo de relógio da equipa (ex.: a equipa de 2 monta o quadro em 2 h) e o €/hora
+          o da equipa. O preço não muda — por dentro conta sempre em horas-homem.
+        </p>
         <label className="grid gap-1 font-medium">
           Validade (dias)
           <input

@@ -228,6 +228,7 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
     laborMargin: flt(fd, "laborMargin", 35),
     laborRate: flt(fd, "laborRate", 20),
     validityDays: Math.round(flt(fd, "validityDays", 30)),
+    crewSize: Math.max(1, Math.round(flt(fd, "crewSize", 1))),
     ...scopeFlags(str(fd, "scope")),
     materialFeePct: flt(fd, "materialFeePct", 0),
     notes: String(fd.get("notes") ?? ""),
@@ -681,6 +682,7 @@ export async function saveCompanyAction(fd: FormData) {
     validityDays: Math.round(flt(fd, "validityDays", 30)),
     conditions: String(fd.get("conditions") ?? ""),
     followUpDays: Math.round(flt(fd, "followUpDays", 5)),
+    crewSize: Math.round(flt(fd, "crewSize", 1)),
   });
   revalidatePath("/definicoes");
   revalidatePath("/painel");

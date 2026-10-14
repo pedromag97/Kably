@@ -10,13 +10,14 @@ import {
   useTransition,
 } from "react";
 import Link from "next/link";
+import CrewRateFields from "@/components/CrewRateFields";
 import type { Article, BudgetFull, BudgetItem, Client } from "@/lib/types";
 import {
   budgetTotals,
   eur,
-  invertRate,
   itemTotals,
   laborFieldText,
+  laborFromField,
   num,
   VAT_MODES,
 } from "@/lib/calc";
@@ -61,6 +62,7 @@ const ItemRow = memo(function ItemRow({
   onDraft,
   onRemove,
   laborMode,
+  crew,
 }: {
   budget: BudgetFull;
   item: BudgetItem;
@@ -69,6 +71,8 @@ const ItemRow = memo(function ItemRow({
   onRemove: (id: number) => void;
   /** "H" = horas por unidade · "R" = unidades por hora (rendimento). */
   laborMode: "H" | "R";
+  /** Pessoas na equipa (Definições). 1 = por homem. */
+  crew: number;
 }) {
   const [, startTransition] = useTransition();
   const [name, setName] = useState(item.name);
@@ -78,7 +82,7 @@ const ItemRow = memo(function ItemRow({
   // O valor exato (h/un) vive à parte do texto que se vê. Assim trocar de
   // vista h/un ⇄ un/h nunca altera o preço por arredondamento.
   const [hoursValue, setHoursValue] = useState(item.laborHours);
-  const [laborText, setLaborText] = useState(laborFieldText(item.laborHours, laborMode));
+  const [laborText, setLaborText] = useState(laborFieldText(item.laborHours, laborMode, crew));
 
   // Re-sincroniza com o servidor sem effect (evita renders em cascata).
   const [lastItem, setLastItem] = useState(item);
@@ -89,20 +93,21 @@ const ItemRow = memo(function ItemRow({
     setQuantity(String(item.quantity));
     setMaterialCost(String(item.materialCost));
     setHoursValue(item.laborHours);
-    setLaborText(laborFieldText(item.laborHours, laborMode));
+    setLaborText(laborFieldText(item.laborHours, laborMode, crew));
   }
 
-  // Trocar de vista só reescreve o texto — o valor exato fica intacto.
-  const [lastMode, setLastMode] = useState(laborMode);
-  if (lastMode !== laborMode) {
-    setLastMode(laborMode);
-    setLaborText(laborFieldText(hoursValue, laborMode));
+  // Trocar de vista (h/un ⇄ un/h, homem ⇄ equipa) só reescreve o texto —
+  // o valor exato em horas-homem fica intacto.
+  const viewKey = `${laborMode}:${crew}`;
+  const [lastView, setLastView] = useState(viewKey);
+  if (lastView !== viewKey) {
+    setLastView(viewKey);
+    setLaborText(laborFieldText(hoursValue, laborMode, crew));
   }
 
   const setLabor = (text: string) => {
     setLaborText(text);
-    const n = parseNum(text);
-    setHoursValue(laborMode === "H" ? n : invertRate(n));
+    setHoursValue(laborFromField(parseNum(text), laborMode, crew));
   };
 
   const live: BudgetItem = {
@@ -222,8 +227,12 @@ const ItemRow = memo(function ItemRow({
           inputMode="decimal"
           title={
             laborMode === "H"
-              ? "Horas de mão de obra por unidade"
-              : "Unidades feitas numa hora (rendimento)"
+              ? crew > 1
+                ? `Horas da equipa de ${crew} por unidade (tempo de relógio)`
+                : "Horas de mão de obra por unidade (1 pessoa)"
+              : crew > 1
+                ? `Unidades que a equipa de ${crew} faz numa hora`
+                : "Unidades feitas numa hora por 1 pessoa (rendimento)"
           }
           className={`${inputCls} text-right`}
         />
@@ -435,6 +444,8 @@ export default function BudgetEditor({
   const [picker, setPicker] = useState<number | null>(null);
   // Como escreves a mão de obra: horas por unidade ou unidades por hora.
   const [laborMode, setLaborMode] = useState<"H" | "R">("H");
+  // Por homem (1) ou por equipa de N — definição deste orçamento.
+  const crew = Math.max(1, budget.crewSize || 1);
 
   // ── Camada "ao vivo" ────────────────────────────────────────────────
   // O servidor continua a ser a verdade, mas o ecrã não espera por ele:
@@ -580,7 +591,8 @@ export default function BudgetEditor({
         </summary>
         <form
           action={(fd) => startTransition(() => updateBudgetMetaAction(budget.id, fd))}
-          className="p-4 pt-0 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm"
+          // items-start: um campo com nota por baixo não pode esticar/desalinhar os vizinhos
+          className="p-4 pt-0 grid grid-cols-2 sm:grid-cols-3 gap-3 items-start text-sm"
         >
           <input type="hidden" name="clientId" value={clientId} />
           <label className="grid gap-1 col-span-2 sm:col-span-3 font-medium">
@@ -674,15 +686,14 @@ export default function BudgetEditor({
               className={inputCls}
             />
           </label>
-          <label className="grid gap-1 font-medium">
-            Mão de obra (€/hora)
-            <input
-              name="laborRate"
-              defaultValue={budget.laborRate}
-              inputMode="decimal"
-              className={inputCls}
-            />
-          </label>
+          <CrewRateFields
+            // o React 19 repõe o formulário depois de guardar: recriar com os valores gravados
+            key={`${budget.crewSize}|${budget.laborRate}|${budget.updatedAt}`}
+            crewSize={crew}
+            laborRate={budget.laborRate}
+            selectable
+            inputClassName={inputCls}
+          />
           <label className="grid gap-1 font-medium">
             Validade (dias)
             <input
@@ -800,7 +811,8 @@ export default function BudgetEditor({
                             className="hover:text-blue-600 underline decoration-dotted underline-offset-2"
                             title="Trocar entre horas por unidade e unidades por hora (rendimento)"
                           >
-                            {laborMode === "H" ? "MO h/un" : "MO un/h"} ⇄
+                            {laborMode === "H" ? "MO h/un" : "MO un/h"}
+                            {crew > 1 ? ` (equipa ${crew})` : ""} ⇄
                           </button>
                         </th>
                         <th className="px-1 pt-2 font-medium text-right">P. Unit.</th>
@@ -817,6 +829,7 @@ export default function BudgetEditor({
                           onDraft={setDraft}
                           onRemove={removeItem}
                           laborMode={laborMode}
+                          crew={crew}
                         />
                       ))}
                     </tbody>
@@ -907,13 +920,29 @@ export default function BudgetEditor({
           </div>
           <div className="flex justify-between text-slate-500">
             <span>
-              Custo mão de obra ({num(totals.laborHours)} h)
+              Custo mão de obra (
+              {crew > 1
+                ? `${num(totals.laborHours / crew)} h de equipa`
+                : `${num(totals.laborHours)} h`}
+              )
               {budget.materialOnly === 1 && " — não faturada"}
             </span>
             <span className={budget.materialOnly === 1 ? "line-through opacity-50" : ""}>
               {eur(budget.materialOnly === 1 ? totals.unbilledLabor : totals.laborCost)}
             </span>
           </div>
+          {totals.laborHours > 0 && (crew > 1 || totals.laborHours / 8 >= 0.1) && (
+            <div className="text-xs text-slate-400 -mt-1">
+              {crew > 1 && <>= {num(totals.laborHours)} horas-homem</>}
+              {crew > 1 && totals.laborHours / crew / 8 >= 0.1 && " · "}
+              {totals.laborHours / crew / 8 >= 0.1 && (
+                <>
+                  ≈ {num(Math.round((totals.laborHours / crew / 8) * 10) / 10)} dias
+                  {crew > 1 ? ` com a equipa de ${crew}` : " de 1 pessoa"} (8 h/dia)
+                </>
+              )}
+            </div>
+          )}
           {totals.materialFee > 0 && (
             <div className="flex justify-between text-slate-500">
               <span>Gestão material ({num(budget.materialFeePct)}%)</span>
