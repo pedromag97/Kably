@@ -93,9 +93,15 @@ export type Article = {
   category: string;
   unit: string;
   materialCost: number; // € por unidade
-  laborHours: number; // horas por unidade
+  laborHours: number; // horas por unidade (moradia / obra corrente)
+  // Horas por unidade em obra grande por fases (empreitadas comerciais, habitação
+  // coletiva): ritmos 2–3× mais rápidos. 0 = sem valor próprio → usa laborHours.
+  laborHoursLarge: number;
   notes: string;
 };
+
+/** Ritmo de trabalho do orçamento: decide que tempo da base entra em cada linha. */
+export type WorkProfile = "STANDARD" | "LARGE";
 
 export type VatMode = "NORMAL" | "REDUCED" | "REVERSE";
 
@@ -120,6 +126,7 @@ export type Budget = {
   // Pessoas na equipa deste orçamento (1 = por homem). Só muda a forma de
   // escrever/ler a MO: horas guardam-se em horas-homem, taxa em €/hora por pessoa.
   crewSize: number;
+  workProfile: WorkProfile; // STANDARD (moradia) | LARGE (obra grande por fases)
   materialFeePct: number; // % de gestão sobre o material fornecido (só-MO)
   notes: string;
   revisionOf: number | null; // id do orçamento base (null se for original)

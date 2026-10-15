@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Client } from "@/lib/types";
-import { VAT_MODES } from "@/lib/calc";
+import { VAT_MODES, WORK_PROFILES } from "@/lib/calc";
 import { createBudgetAction } from "@/app/actions";
 import SubmitButton from "@/components/SubmitButton";
 
@@ -133,6 +133,28 @@ export default function NewBudgetForm({
             <span className="grid gap-0.5">
               <span className="text-sm font-medium">{s.label}</span>
               <span className="text-xs text-slate-500">{s.hint}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-medium mb-1">Que tipo de obra é?</legend>
+        {Object.entries(WORK_PROFILES).map(([value, p]) => (
+          <label
+            key={value}
+            className="flex items-start gap-2.5 border border-slate-200 rounded-lg p-3 cursor-pointer hover:bg-slate-50 has-checked:border-blue-500 has-checked:bg-blue-50"
+          >
+            <input
+              type="radio"
+              name="workProfile"
+              value={value}
+              defaultChecked={value === "STANDARD"}
+              className="mt-0.5"
+            />
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium">{p.label}</span>
+              <span className="text-xs text-slate-500">{p.hint}</span>
             </span>
           </label>
         ))}

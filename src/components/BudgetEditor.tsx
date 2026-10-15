@@ -13,6 +13,7 @@ import Link from "next/link";
 import CrewRateFields from "@/components/CrewRateFields";
 import type { Article, BudgetFull, BudgetItem, Client } from "@/lib/types";
 import {
+  articleHours,
   budgetTotals,
   eur,
   itemTotals,
@@ -20,6 +21,7 @@ import {
   laborFromField,
   num,
   VAT_MODES,
+  WORK_PROFILES,
 } from "@/lib/calc";
 import {
   addBlankItemAction,
@@ -311,7 +313,7 @@ function ArticleSearch({
       unit: a.unit,
       quantity: 1,
       materialCost: a.materialCost,
-      laborHours: a.laborHours,
+      laborHours: articleHours(a, budget.workProfile),
       materialIncluded: 0,
       position: Number.MAX_SAFE_INTEGER,
     });
@@ -386,6 +388,7 @@ function ArticleSearch({
                 chapterId: 0,
                 articleId: a.id,
                 quantity: 1,
+                laborHours: articleHours(a, budget.workProfile),
                 materialIncluded: 0,
                 position: 0,
               },
@@ -557,6 +560,14 @@ export default function BudgetEditor({
             SÓ MATERIAL
           </span>
         )}
+        {budget.workProfile === "LARGE" && (
+          <span
+            className="text-xs font-semibold bg-emerald-100 text-emerald-800 rounded px-2 py-1"
+            title={WORK_PROFILES.LARGE.hint}
+          >
+            OBRA GRANDE
+          </span>
+        )}
         {revisionBase && (
           <Link
             href={`/orcamentos/${revisionBase.id}`}
@@ -707,6 +718,8 @@ export default function BudgetEditor({
             O que é faturado
             <select
               name="scope"
+              // o React 19 repõe o formulário depois de guardar: recriar com o valor gravado
+              key={`scope|${budget.updatedAt}`}
               defaultValue={
                 budget.laborOnly === 1
                   ? "LABOR"
@@ -720,6 +733,25 @@ export default function BudgetEditor({
               <option value="LABOR">Só mão de obra (material do cliente)</option>
               <option value="MATERIAL">Só material (montagem de outrem)</option>
             </select>
+          </label>
+          <label className="grid gap-1 font-medium">
+            Tipo de obra (ritmo)
+            <select
+              name="workProfile"
+              key={`wp|${budget.updatedAt}`}
+              defaultValue={budget.workProfile ?? "STANDARD"}
+              className={inputCls}
+              title={WORK_PROFILES.LARGE.hint}
+            >
+              {Object.entries(WORK_PROFILES).map(([k, p]) => (
+                <option key={k} value={k}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-slate-500">
+              Decide que tempo da base entra nas linhas novas. As linhas já criadas não mudam.
+            </span>
           </label>
           <label className="grid gap-1 font-medium">
             Taxa gestão material (%)

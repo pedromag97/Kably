@@ -29,11 +29,27 @@ function parseNum(v: string): number {
  * Mão de obra escrita de duas maneiras: horas por unidade, ou o inverso —
  * quantas unidades se fazem numa hora (rendimento). Guarda sempre h/un.
  */
-function LaborInput({ defaultHours }: { defaultHours: number }) {
+function LaborInput({
+  defaultHours,
+  name = "laborHours",
+  label = "Mão de obra",
+  placeholder,
+  hint,
+  wide = false,
+}: {
+  defaultHours: number;
+  name?: string;
+  label?: string;
+  placeholder?: string;
+  hint?: string;
+  wide?: boolean;
+}) {
   const [mode, setMode] = useState<"H" | "R">("H");
   // Valor exato à parte do texto: trocar de vista não pode alterar o guardado.
   const [hours, setHours] = useState(defaultHours);
-  const [value, setValue] = useState(laborFieldText(defaultHours, "H"));
+  const [value, setValue] = useState(
+    defaultHours || !placeholder ? laborFieldText(defaultHours, "H") : ""
+  );
 
   const switchMode = (next: "H" | "R") => {
     if (next === mode) return;
@@ -48,29 +64,33 @@ function LaborInput({ defaultHours }: { defaultHours: number }) {
   };
 
   return (
-    <label className="grid gap-1 font-medium">
-      Mão de obra
+    <label className={`grid gap-1 font-medium ${wide ? "col-span-2" : ""}`}>
+      {label}
       <div className="flex gap-1">
         <input
           value={value}
           onChange={(e) => onValue(e.target.value)}
           inputMode="decimal"
-          className={inputCls}
+          placeholder={placeholder}
+          // flex-1 min-w-0: o seletor ao lado não pode esmagar o campo do número
+          className={`${inputCls} flex-1 min-w-0`}
         />
         <select
           value={mode}
           onChange={(e) => switchMode(e.target.value as "H" | "R")}
-          className={`${inputCls} w-auto shrink-0`}
+          // sem `w-full` (ganhava ao `w-auto` e esmagava o campo do número)
+          className="border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
           title="Como queres escrever o tempo desta tarefa"
         >
           <option value="H">h / un</option>
           <option value="R">un / hora</option>
         </select>
       </div>
-      <input type="hidden" name="laborHours" value={hours} />
+      <input type="hidden" name={name} value={hours} />
       <span className="text-xs font-normal text-slate-500">
-        = {minutesLabel(hours)} por unidade · {perHourLabel(hours)} por hora ·{" "}
-        {perDayLabel(hours)} por dia
+        {hours > 0
+          ? `= ${minutesLabel(hours)} por unidade · ${perHourLabel(hours)} por hora · ${perDayLabel(hours)} por dia`
+          : hint}
       </span>
     </label>
   );
@@ -140,7 +160,15 @@ function ArticleForm({
             className={inputCls}
           />
         </label>
-        <LaborInput defaultHours={article?.laborHours ?? 0} />
+        <LaborInput defaultHours={article?.laborHours ?? 0} label="Mão de obra (moradia / corrente)" />
+        <LaborInput
+          defaultHours={article?.laborHoursLarge ?? 0}
+          name="laborHoursLarge"
+          label="Mão de obra em obra grande (opcional)"
+          placeholder="vazio = usa o tempo corrente"
+          hint="Empreitadas por fases: ritmo 2–3× mais rápido. Entra nos orçamentos marcados «Obra grande»."
+          wide
+        />
         <label className="grid gap-1 font-medium col-span-2">
           Código (opcional)
           <input name="code" defaultValue={article?.code} className={inputCls} />
@@ -236,6 +264,12 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
               <th className="px-2 py-2 font-medium text-right" title="Quantas unidades faz 1 pessoa num dia de 8 h">
                 /dia (8h)
               </th>
+              <th
+                className="px-2 py-2 font-medium text-right text-emerald-700"
+                title="Horas por unidade em obra grande por fases (vazio = usa o tempo corrente)"
+              >
+                Obra grande (h)
+              </th>
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
@@ -256,6 +290,12 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
                 </td>
                 <td className="px-2 py-2 text-right text-slate-500">
                   {perDayLabel(a.laborHours)}
+                </td>
+                <td
+                  className="px-2 py-2 text-right text-emerald-700 whitespace-nowrap"
+                  title={a.laborHoursLarge > 0 ? `${perHourLabel(a.laborHoursLarge)} por hora` : undefined}
+                >
+                  {a.laborHoursLarge > 0 ? a.laborHoursLarge : "—"}
                 </td>
                 <td className="px-2 py-2 text-right whitespace-nowrap">
                   <button

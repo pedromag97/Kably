@@ -132,6 +132,20 @@ identificadores de código em inglês.
   faturação tem um **PDF de auto de medição** (`/obras/[id]/fatura/[phase]`,
   `AutoMedicaoPdf` em `pdf.tsx`) com cabeçalho da empresa, cliente, obra e a
   parcela com decomposição s/IVA + IVA + total (não substitui fatura certificada).
+- **Perfil de obra (ritmo) — moradia vs obra grande (out. 2026):** a mesma tarefa
+  leva ~18 min numa moradia e ~6 min numa empreitada por fases. Cada artigo tem dois
+  tempos: `articles.laborHours` (corrente) e `articles.laborHoursLarge` (obra grande,
+  0 = usa o corrente). Cada orçamento tem `budgets.workProfile` (`STANDARD` | `LARGE`),
+  perguntado ao criar (NewBudgetForm, MqtImporter) e alterável nas definições do
+  orçamento; crachá «OBRA GRANDE» no editor. `articleHours(a, profile)` em `calc.ts`
+  decide que tempo entra quando se adiciona um artigo (addItemFromArticleAction,
+  ArticleSearch, importMqtAction) — linhas já criadas não mudam. Artigos e Tempos
+  mostram a coluna verde «Obra grande». Os 28 tempos iniciais vieram do comparador de
+  obras reais (mediana do preço só-MO ÷ 26,78 €/h): `scripts/perfil-obra-grande.json`
+  + `node scripts/aplicar-perfil-obra-grande.mjs [--ensaio] [--forcar] [--turso]`
+  (associa por nome do artigo; idempotente). Regra: só se aplicou onde a obra grande é
+  mais rápida do que o tempo corrente — onde o mercado era mais lento (condutores
+  H07V, calha técnica, projetor), é o tempo corrente da base que está otimista.
 
 ## Mapa do código
 
@@ -161,6 +175,9 @@ identificadores de código em inglês.
 | `src/components/MqtImporter.tsx` + `src/app/orcamentos/importar/` | Assistente de importação de MQT em 3 passos (ficheiro/colunas → associação com revisão → criar). Aliases memorizados em `mqt_aliases` |
 | `scripts/iniciar.ps1` | Arranca servidor + túnel Cloudflare e mostra URL pública |
 | `scripts/sample-budget.js` | Cria orçamento de exemplo na BD |
+| `scripts/aplicar-perfil-obra-grande.mjs` + `perfil-obra-grande.json` | Carrega os tempos «obra grande» (h/un) na base de artigos, por nome |
+| `scripts/importar-artigos-reais.mjs` | Importa `data/artigos-reais.json` (fora do git) como artigos com custo deduzido |
+| `src/app/tempos/page.tsx` | Página Tempos: regras, tabela h/un (corrente e obra grande), multiplicadores, calibração |
 | `docs/guia-orcamentacao.md` | Guia didático: conceitos + matemática das margens |
 | `docs/tempos-mao-de-obra.md` | Tabela de rendimentos (h/unidade) + método de calibração |
 

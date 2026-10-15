@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listArticles } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { minutesLabel, perDayLabel } from "@/lib/calc";
+import { minutesLabel, perDayLabel, perHourLabel } from "@/lib/calc";
 import type { Article } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ export default async function TemposPage() {
 
   const withHours = articles.filter((a) => a.laborHours > 0);
   const totalHours = withHours.reduce((s, a) => s + a.laborHours, 0);
+  const withLarge = articles.filter((a) => a.laborHoursLarge > 0);
 
   return (
     <div className="grid gap-6">
@@ -78,6 +79,26 @@ export default async function TemposPage() {
         ))}
       </div>
 
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 grid gap-2">
+        <h2 className="text-lg font-bold">Dois ritmos: moradia vs obra grande</h2>
+        <p className="text-sm text-slate-600">
+          A mesma tomada leva <strong>~18 min</strong> numa moradia (marcar, abrir, puxar,
+          montar, testar, arrumar) e <strong>~6 min</strong> numa empreitada por fases, onde se
+          montam dezenas seguidas só do mecanismo. Nas obras comerciais que analisámos
+          (IEFP, Continente, Pampilhosa, GARMEP, Antas) o ritmo é 2–3× o da moradia.
+        </p>
+        <p className="text-sm text-slate-600">
+          Por isso cada artigo pode ter um segundo tempo, <strong>«obra grande»</strong>{" "}
+          (coluna verde). Ao criar um orçamento escolhes o tipo de obra, e as linhas novas
+          entram com o tempo certo. Sem tempo de obra grande, o artigo usa o corrente.
+        </p>
+        <p className="text-xs text-slate-500">
+          {withLarge.length} artigos têm tempo de obra grande. Os valores vieram do preço mediano
+          das obras reais ÷ 26,78 €/h (a taxa de venda implícita dessas obras) — afina-os com os
+          teus registos.
+        </p>
+      </div>
+
       <div>
         <div className="flex flex-wrap items-baseline gap-3 mb-2">
           <h2 className="text-lg font-bold">Tabela da tua base de artigos</h2>
@@ -101,6 +122,10 @@ export default async function TemposPage() {
                 <th className="px-2 py-2 font-medium text-right">h/un</th>
                 <th className="px-2 py-2 font-medium text-right">≈ tempo</th>
                 <th className="px-2 py-2 font-medium text-right">/dia (8h)</th>
+                <th className="px-2 py-2 font-medium text-right text-emerald-700" title="Horas por unidade em obra grande por fases">
+                  Obra grande h/un
+                </th>
+                <th className="px-2 py-2 font-medium text-right text-emerald-700">un/h</th>
               </tr>
             </thead>
             <tbody>
@@ -213,7 +238,7 @@ function CategoryRows({
   return (
     <>
       <tr className="bg-slate-50 border-b border-slate-200">
-        <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold text-slate-600">
+        <td colSpan={7} className="px-3 py-1.5 text-xs font-semibold text-slate-600">
           {category}
         </td>
       </tr>
@@ -227,6 +252,12 @@ function CategoryRows({
           </td>
           <td className="px-2 py-2 text-right text-slate-500">
             {perDayLabel(a.laborHours)}
+          </td>
+          <td className="px-2 py-2 text-right text-emerald-700">
+            {a.laborHoursLarge > 0 ? a.laborHoursLarge : "—"}
+          </td>
+          <td className="px-2 py-2 text-right text-emerald-700">
+            {a.laborHoursLarge > 0 ? perHourLabel(a.laborHoursLarge) : "—"}
           </td>
         </tr>
       ))}

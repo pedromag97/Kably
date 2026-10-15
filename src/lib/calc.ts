@@ -1,4 +1,29 @@
-import type { BudgetFull, BudgetItem, VatMode } from "./types";
+import type { Article, BudgetFull, BudgetItem, VatMode, WorkProfile } from "./types";
+
+// ── Perfil de obra ────────────────────────────────────────────────────
+// A mesma tomada leva ~18 min numa moradia e ~6 min numa empreitada por fases
+// (só o mecanismo, dezenas seguidas, tudo preparado). A base guarda os dois
+// tempos; o perfil do orçamento decide qual entra em cada linha.
+
+export const WORK_PROFILES: Record<WorkProfile, { label: string; hint: string }> = {
+  STANDARD: {
+    label: "Moradia / obra corrente",
+    hint: "Remodelações, moradias, pequenos comércios: tempos «porta a porta» da base.",
+  },
+  LARGE: {
+    label: "Obra grande por fases",
+    hint:
+      "Empreitadas comerciais e habitação coletiva: ritmos 2–3× mais rápidos (ex.: tomada a 6 min em vez de 18). Usa o tempo «obra grande» de cada artigo quando existe.",
+  },
+};
+
+/** Horas-homem por unidade que um artigo traz para um orçamento com este perfil. */
+export function articleHours(
+  a: Pick<Article, "laborHours" | "laborHoursLarge">,
+  profile: WorkProfile | string | undefined
+): number {
+  return profile === "LARGE" && a.laborHoursLarge > 0 ? a.laborHoursLarge : a.laborHours;
+}
 
 export const VAT_MODES: Record<VatMode, { rate: number; label: string; pdfNote: string }> = {
   NORMAL: { rate: 0.23, label: "IVA 23%", pdfNote: "" },

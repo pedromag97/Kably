@@ -7,7 +7,8 @@ import * as store from "@/lib/db";
 import { DEFAULT_CHAPTERS } from "@/lib/seed-data";
 import { endSession, requireOwner, requireUser } from "@/lib/session";
 import { emailButton, emailLayout, getBaseUrl, sendEmail } from "@/lib/email";
-import type { VatMode } from "@/lib/types";
+import { articleHours } from "@/lib/calc";
+import type { VatMode, WorkProfile } from "@/lib/types";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -72,6 +73,11 @@ function scopeFlags(scope: string): { laborOnly: number; materialOnly: number } 
   };
 }
 
+/** Perfil de obra do formulário; tudo o que não for LARGE é o ritmo corrente. */
+function workProfileOf(v: string): WorkProfile {
+  return v === "LARGE" ? "LARGE" : "STANDARD";
+}
+
 export async function createBudgetAction(fd: FormData) {
   const user = await requireUser();
   const clientId = await resolveClientId(user.companyId, fd);
@@ -87,6 +93,7 @@ export async function createBudgetAction(fd: FormData) {
       siteAddress: str(fd, "siteAddress"),
       vatMode: (str(fd, "vatMode") || "NORMAL") as VatMode,
       ...scopeFlags(str(fd, "scope")),
+      workProfile: workProfileOf(str(fd, "workProfile")),
     },
     DEFAULT_CHAPTERS
   );
@@ -230,6 +237,7 @@ export async function updateBudgetMetaAction(budgetId: number, fd: FormData) {
     validityDays: Math.round(flt(fd, "validityDays", 30)),
     crewSize: Math.max(1, Math.round(flt(fd, "crewSize", 1))),
     ...scopeFlags(str(fd, "scope")),
+    workProfile: workProfileOf(str(fd, "workProfile")),
     materialFeePct: flt(fd, "materialFeePct", 0),
     notes: String(fd.get("notes") ?? ""),
   });
@@ -274,13 +282,15 @@ export async function addItemFromArticleAction(
   if (!companyId) return;
   const a = await store.getArticle(companyId, articleId);
   if (!a) return;
+  // O perfil do orçamento decide que tempo da base entra (moradia vs obra grande).
+  const budget = await store.getBudget(companyId, budgetId);
   await store.addItem(budgetId, chapterId, {
     articleId: a.id,
     name: a.name,
     unit: a.unit,
     quantity: quantity > 0 ? quantity : 1,
     materialCost: a.materialCost,
-    laborHours: a.laborHours,
+    laborHours: articleHours(a, budget?.workProfile),
   });
   revalidatePath(`/orcamentos/${budgetId}`);
 }
@@ -403,6 +413,7 @@ export type ImportMeta = {
   clientName: string;
   vatMode: VatMode;
   scope: "BOTH" | "LABOR" | "MATERIAL";
+  workProfile?: WorkProfile;
 };
 
 export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
@@ -422,6 +433,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
       siteAddress: "",
       vatMode: meta.vatMode || "NORMAL",
       ...scopeFlags(meta.scope),
+      workProfile: workProfileOf(meta.workProfile ?? ""),
     },
     []
   );
@@ -454,7 +466,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
           unit: line.unit || a.unit,
           quantity,
           materialCost: a.materialCost,
-          laborHours: a.laborHours,
+          laborHours: articleHours(a, meta.workProfile),
         },
       });
     } else if (line.choice.kind === "new") {
@@ -465,6 +477,7 @@ export async function importMqtAction(meta: ImportMeta, lines: ImportLine[]) {
         unit: line.unit || "un",
         materialCost: 0,
         laborHours: 0,
+        laborHoursLarge: 0,
         notes: "Criado por importação de MQT — preencher custos",
       });
       await store.saveAlias(companyId, normalizeText(line.mqtText), articleId);
@@ -517,9 +530,11 @@ export async function createArticleAction(fd: FormData) {
     unit: str(fd, "unit") || "un",
     materialCost: flt(fd, "materialCost"),
     laborHours: flt(fd, "laborHours"),
+    laborHoursLarge: flt(fd, "laborHoursLarge"),
     notes: str(fd, "notes"),
   });
   revalidatePath("/artigos");
+  revalidatePath("/tempos");
 }
 
 export async function updateArticleAction(articleId: number, fd: FormData) {
@@ -531,9 +546,11 @@ export async function updateArticleAction(articleId: number, fd: FormData) {
     unit: str(fd, "unit") || "un",
     materialCost: flt(fd, "materialCost"),
     laborHours: flt(fd, "laborHours"),
+    laborHoursLarge: flt(fd, "laborHoursLarge"),
     notes: str(fd, "notes"),
   });
   revalidatePath("/artigos");
+  revalidatePath("/tempos");
 }
 
 export async function deleteArticleAction(articleId: number) {
@@ -633,6 +650,7 @@ export async function importQuoteAction(
         unit: line.unit || "un",
         materialCost: line.price,
         laborHours: 0,
+        laborHoursLarge: 0,
         notes: "Criado por importação de cotação de fornecedor",
       });
       await store.saveAlias(companyId, normalizeText(line.text), articleId);

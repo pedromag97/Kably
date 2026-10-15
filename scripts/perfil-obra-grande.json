@@ -1,0 +1,415 @@
+{
+  "_sobre": "Tempos de obra grande por fases (h/un) deduzidos do comparador Comparacao_Obras.xlsx: mediana do preço só-MO das obras reais ÷ 26,78 €/h (taxa de venda implícita). Aplicar com: node scripts/aplicar-perfil-obra-grande.mjs",
+  "taxaHoraria": 26.78,
+  "artigos": [
+    {
+      "name": "Armadura estanque LED 36W 120 cm",
+      "task": "Luminária interior (montagem)",
+      "laborHoursLarge": 0.4462,
+      "unPerHour": 2.2,
+      "current": 0.5,
+      "ratio": 0.89,
+      "medianPrice": 11.95,
+      "obras": [
+        "GARMEP — Arco Living (St. Tirso)",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Bloco autónomo de emergência",
+      "task": "Bloco autónomo de emergência",
+      "laborHoursLarge": 0.4167,
+      "unPerHour": 2.4,
+      "current": 0.5,
+      "ratio": 0.83,
+      "medianPrice": 11.16,
+      "obras": [
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Botão de pressão",
+      "task": "Botão de pressão / campainha",
+      "laborHoursLarge": 0.127,
+      "unPerHour": 7.9,
+      "current": 0.3,
+      "ratio": 0.42,
+      "medianPrice": 3.4,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva"
+      ]
+    },
+    {
+      "name": "Cabo LSVAV 4x16 mm² (coluna/entrada)",
+      "task": "Cabo 10–16 mm²",
+      "laborHoursLarge": 0.0542,
+      "unPerHour": 18.5,
+      "current": 0.1,
+      "ratio": 0.54,
+      "medianPrice": 1.45,
+      "obras": [
+        "Continente Cacia",
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Cabo RV-K 3G10 mm²",
+      "task": "Cabo 10–16 mm²",
+      "laborHoursLarge": 0.0542,
+      "unPerHour": 18.5,
+      "current": 0.06,
+      "ratio": 0.9,
+      "medianPrice": 1.45,
+      "obras": [
+        "Continente Cacia",
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Cabo UTP cat. 6",
+      "task": "Cabo UTP cat. 6",
+      "laborHoursLarge": 0.0271,
+      "unPerHour": 36.9,
+      "current": 0.03,
+      "ratio": 0.9,
+      "medianPrice": 0.72,
+      "obras": [
+        "Continente Cacia"
+      ]
+    },
+    {
+      "name": "Cabo XV 3G1,5 mm²",
+      "task": "Cabo 1,5 mm² (2–3 condutores)",
+      "laborHoursLarge": 0.0275,
+      "unPerHour": 36.4,
+      "current": 0.04,
+      "ratio": 0.69,
+      "medianPrice": 0.74,
+      "obras": [
+        "Estação Pampilhosa",
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva",
+        "Continente Cacia"
+      ]
+    },
+    {
+      "name": "Cabo XV 3G2,5 mm²",
+      "task": "Cabo 3G2,5 mm²",
+      "laborHoursLarge": 0.0288,
+      "unPerHour": 34.7,
+      "current": 0.04,
+      "ratio": 0.72,
+      "medianPrice": 0.77,
+      "obras": [
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva",
+        "Continente Cacia",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Cabo XV 5G2,5 mm²",
+      "task": "Cabo 4G/5G2,5 mm²",
+      "laborHoursLarge": 0.0318,
+      "unPerHour": 31.4,
+      "current": 0.05,
+      "ratio": 0.64,
+      "medianPrice": 0.85,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "Continente Cacia",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Cabo XV 5G6 mm²",
+      "task": "Cabo 3G/5G6 mm²",
+      "laborHoursLarge": 0.0395,
+      "unPerHour": 25.3,
+      "current": 0.06,
+      "ratio": 0.66,
+      "medianPrice": 1.06,
+      "obras": [
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa",
+        "GARMEP — Arco Living (St. Tirso)"
+      ]
+    },
+    {
+      "name": "Caixa de derivação de encastrar",
+      "task": "Caixa de derivação embebida",
+      "laborHoursLarge": 0.1404,
+      "unPerHour": 7.1,
+      "current": 0.2,
+      "ratio": 0.7,
+      "medianPrice": 3.76,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)"
+      ]
+    },
+    {
+      "name": "Caixa de derivação estanque IP55",
+      "task": "Caixa de derivação saliente",
+      "laborHoursLarge": 0.1384,
+      "unPerHour": 7.2,
+      "current": 0.25,
+      "ratio": 0.55,
+      "medianPrice": 3.71,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa",
+        "Continente Cacia"
+      ]
+    },
+    {
+      "name": "Campainha e botão exterior",
+      "task": "Botão de pressão / campainha",
+      "laborHoursLarge": 0.127,
+      "unPerHour": 7.9,
+      "current": 0.5,
+      "ratio": 0.25,
+      "medianPrice": 3.4,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "GARMEP — Arco Living (St. Tirso)",
+        "IEFP Castelo de Paiva"
+      ]
+    },
+    {
+      "name": "Comutador de escada",
+      "task": "Comutador de escada",
+      "laborHoursLarge": 0.15,
+      "unPerHour": 6.7,
+      "current": 0.3,
+      "ratio": 0.5,
+      "medianPrice": 4.02,
+      "obras": [
+        "FC Diegues — Antas",
+        "Nexovolt — Antas",
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Comutador de lustre (duplo)",
+      "task": "Comutador de lustre",
+      "laborHoursLarge": 0.15,
+      "unPerHour": 6.7,
+      "current": 0.35,
+      "ratio": 0.43,
+      "medianPrice": 4.02,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Detetor de movimento",
+      "task": "Detetor de movimento / presença",
+      "laborHoursLarge": 0.3024,
+      "unPerHour": 3.3,
+      "current": 0.5,
+      "ratio": 0.6,
+      "medianPrice": 8.1,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Continente Cacia",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Elétrodo de terra (vareta 2 m)",
+      "task": "Elétrodo de terra",
+      "laborHoursLarge": 0.3101,
+      "unPerHour": 3.2,
+      "current": 1.0,
+      "ratio": 0.31,
+      "medianPrice": 8.3,
+      "obras": [
+        "Estação Pampilhosa",
+        "Continente Cacia"
+      ]
+    },
+    {
+      "name": "Furação para caixas de aparelhagem",
+      "task": "Caixa de aparelhagem",
+      "laborHoursLarge": 0.0827,
+      "unPerHour": 12.1,
+      "current": 0.15,
+      "ratio": 0.55,
+      "medianPrice": 2.21,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "Continente Cacia",
+        "GARMEP — Arco Living (St. Tirso)"
+      ]
+    },
+    {
+      "name": "Interruptor simples",
+      "task": "Interruptor simples",
+      "laborHoursLarge": 0.1471,
+      "unPerHour": 6.8,
+      "current": 0.3,
+      "ratio": 0.49,
+      "medianPrice": 3.94,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Inversor de grupo",
+      "task": "Inversor de grupo",
+      "laborHoursLarge": 0.1131,
+      "unPerHour": 8.8,
+      "current": 0.35,
+      "ratio": 0.32,
+      "medianPrice": 3.03,
+      "obras": [
+        "FC Diegues — Antas",
+        "Nexovolt — Antas",
+        "GARMEP — Arco Living (St. Tirso)"
+      ]
+    },
+    {
+      "name": "Painel LED 60x60 40W",
+      "task": "Luminária interior (montagem)",
+      "laborHoursLarge": 0.4462,
+      "unPerHour": 2.2,
+      "current": 0.5,
+      "ratio": 0.89,
+      "medianPrice": 11.95,
+      "obras": [
+        "GARMEP — Arco Living (St. Tirso)",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tomada estanque IP44",
+      "task": "Tomada schuko saliente / estanque",
+      "laborHoursLarge": 0.1486,
+      "unPerHour": 6.7,
+      "current": 0.35,
+      "ratio": 0.42,
+      "medianPrice": 3.98,
+      "obras": [
+        "Continente Cacia",
+        "IEFP Castelo de Paiva"
+      ]
+    },
+    {
+      "name": "Tomada schuko dupla",
+      "task": "Tomada schuko embebida",
+      "laborHoursLarge": 0.1456,
+      "unPerHour": 6.9,
+      "current": 0.35,
+      "ratio": 0.42,
+      "medianPrice": 3.9,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tomada schuko simples",
+      "task": "Tomada schuko embebida",
+      "laborHoursLarge": 0.1456,
+      "unPerHour": 6.9,
+      "current": 0.3,
+      "ratio": 0.49,
+      "medianPrice": 3.9,
+      "obras": [
+        "Nexovolt — Antas",
+        "FC Diegues — Antas",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "GARMEP — Arco Living (St. Tirso)",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tomada terminal coaxial + RJ45",
+      "task": "Tomada de dados RJ45",
+      "laborHoursLarge": 0.2242,
+      "unPerHour": 4.5,
+      "current": 0.5,
+      "ratio": 0.45,
+      "medianPrice": 6.0,
+      "obras": [
+        "IEFP Castelo de Paiva",
+        "Continente Cacia",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tubo VD 20 mm embebido",
+      "task": "Tubo VD 20",
+      "laborHoursLarge": 0.0491,
+      "unPerHour": 20.4,
+      "current": 0.05,
+      "ratio": 0.98,
+      "medianPrice": 1.31,
+      "obras": [
+        "GARMEP — Arco Living (St. Tirso)",
+        "Continente Cacia",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tubo VD 25 mm embebido",
+      "task": "Tubo VD 25",
+      "laborHoursLarge": 0.0495,
+      "unPerHour": 20.2,
+      "current": 0.06,
+      "ratio": 0.83,
+      "medianPrice": 1.33,
+      "obras": [
+        "GARMEP — Arco Living (St. Tirso)",
+        "Continente Cacia",
+        "IEFP Castelo de Paiva",
+        "Estação Pampilhosa"
+      ]
+    },
+    {
+      "name": "Tubo VD 32 mm embebido",
+      "task": "Tubo VD 32",
+      "laborHoursLarge": 0.0583,
+      "unPerHour": 17.2,
+      "current": 0.07,
+      "ratio": 0.83,
+      "medianPrice": 1.56,
+      "obras": [
+        "Continente Cacia"
+      ]
+    }
+  ]
+}

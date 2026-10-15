@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import type { Article, Company, VatMode } from "@/lib/types";
+import type { Article, Company, VatMode, WorkProfile } from "@/lib/types";
 import { guessColumns, suggestArticle, normalizeText } from "@/lib/matching";
-import { itemTotals, eur, VAT_MODES } from "@/lib/calc";
+import { articleHours, itemTotals, eur, VAT_MODES, WORK_PROFILES } from "@/lib/calc";
 import { importMqtAction, type ImportLine } from "@/app/actions";
 
 const inputCls =
@@ -74,6 +74,7 @@ export default function MqtImporter({
   const [clientName, setClientName] = useState("");
   const [vatMode, setVatMode] = useState<VatMode>("NORMAL");
   const [scope, setScope] = useState<"BOTH" | "LABOR" | "MATERIAL">("BOTH");
+  const [workProfile, setWorkProfile] = useState<WorkProfile>("STANDARD");
 
   const aliasMap = useMemo(
     () => new Map(aliases.map((a) => [a.normText, a.articleId])),
@@ -259,7 +260,7 @@ export default function MqtImporter({
         unit: a.unit,
         quantity: l.quantity,
         materialCost: a.materialCost,
-        laborHours: a.laborHours,
+        laborHours: articleHours(a, workProfile),
         materialIncluded: 0,
         position: 0,
       },
@@ -291,7 +292,7 @@ export default function MqtImporter({
         choice: l.choice,
       }));
     startTransition(() =>
-      importMqtAction({ title, clientName, vatMode, scope }, payload)
+      importMqtAction({ title, clientName, vatMode, scope, workProfile }, payload)
     );
   }
 
@@ -614,6 +615,24 @@ export default function MqtImporter({
                   onChange={() => setScope(value)}
                 />
                 {label}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="grid gap-2 text-sm font-medium">
+            Que tipo de obra é?
+            {Object.entries(WORK_PROFILES).map(([value, p]) => (
+              <label key={value} className="flex items-start gap-2 font-normal">
+                <input
+                  type="radio"
+                  name="perfilObra"
+                  className="mt-1"
+                  checked={workProfile === value}
+                  onChange={() => setWorkProfile(value as WorkProfile)}
+                />
+                <span>
+                  {p.label}
+                  <span className="block text-xs text-slate-500">{p.hint}</span>
+                </span>
               </label>
             ))}
           </fieldset>
