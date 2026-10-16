@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listArticles } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { minutesLabel, perDayLabel, perHourLabel } from "@/lib/calc";
+import { hoursLabel, minutesLabel, perDayLabel, perHourLabel } from "@/lib/calc";
 import type { Article } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -246,7 +246,7 @@ function CategoryRows({
         <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
           <td className="px-3 py-2">{a.name}</td>
           <td className="px-2 py-2 text-center text-slate-500">{a.unit}</td>
-          <td className="px-2 py-2 text-right">{a.laborHours || "—"}</td>
+          <td className="px-2 py-2 text-right">{a.laborHours ? hoursLabel(a.laborHours) : "—"}</td>
           <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">
             {minutesLabel(a.laborHours)}
           </td>
@@ -254,7 +254,7 @@ function CategoryRows({
             {perDayLabel(a.laborHours)}
           </td>
           <td className="px-2 py-2 text-right text-emerald-700">
-            {a.laborHoursLarge > 0 ? a.laborHoursLarge : "—"}
+            {a.laborHoursLarge > 0 ? hoursLabel(a.laborHoursLarge) : "—"}
           </td>
           <td className="px-2 py-2 text-right text-emerald-700">
             {a.laborHoursLarge > 0 ? perHourLabel(a.laborHoursLarge) : "—"}

@@ -158,8 +158,9 @@ for (const a of items) {
     (a.extra ? ` ${a.extra}` : "");
   stmts.push({
     sql: "INSERT INTO articles (companyId, code, name, category, unit, materialCost, laborHours, notes) VALUES (?,?,?,?,?,?,?,?)",
+    // horas: 3 casas, sempre para cima (mais horas = mais €, nunca menos)
     args: [companyId, code, name, category, a.unit,
-           Math.round(materialCost * 10000) / 10000, Math.round(laborHours * 1e6) / 1e6, notes],
+           Math.round(materialCost * 10000) / 10000, Math.ceil(laborHours * 1000 - 1e-9) / 1000, notes],
   });
   perCategory[category] = (perCategory[category] ?? 0) + 1;
 }

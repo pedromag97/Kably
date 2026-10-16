@@ -1,11 +1,11 @@
 {
-  "_sobre": "Tempos de obra grande por fases (h/un) deduzidos do comparador Comparacao_Obras.xlsx: mediana do preço só-MO das obras reais ÷ 26,78 €/h (taxa de venda implícita). Aplicar com: node scripts/aplicar-perfil-obra-grande.mjs",
+  "_sobre": "Tempos de obra grande por fases (h/un) deduzidos do comparador Comparacao_Obras.xlsx: mediana do preço só-MO das obras reais ÷ 26,78 €/h (taxa de venda implícita), 3 casas decimais arredondadas para cima. Aplicar com: node scripts/aplicar-perfil-obra-grande.mjs",
   "taxaHoraria": 26.78,
   "artigos": [
     {
       "name": "Armadura estanque LED 36W 120 cm",
       "task": "Luminária interior (montagem)",
-      "laborHoursLarge": 0.4462,
+      "laborHoursLarge": 0.447,
       "unPerHour": 2.2,
       "current": 0.5,
       "ratio": 0.89,
@@ -20,7 +20,7 @@
     {
       "name": "Bloco autónomo de emergência",
       "task": "Bloco autónomo de emergência",
-      "laborHoursLarge": 0.4167,
+      "laborHoursLarge": 0.417,
       "unPerHour": 2.4,
       "current": 0.5,
       "ratio": 0.83,
@@ -49,10 +49,10 @@
     {
       "name": "Cabo LSVAV 4x16 mm² (coluna/entrada)",
       "task": "Cabo 10–16 mm²",
-      "laborHoursLarge": 0.0542,
-      "unPerHour": 18.5,
+      "laborHoursLarge": 0.055,
+      "unPerHour": 18.2,
       "current": 0.1,
-      "ratio": 0.54,
+      "ratio": 0.55,
       "medianPrice": 1.45,
       "obras": [
         "Continente Cacia",
@@ -64,10 +64,10 @@
     {
       "name": "Cabo RV-K 3G10 mm²",
       "task": "Cabo 10–16 mm²",
-      "laborHoursLarge": 0.0542,
-      "unPerHour": 18.5,
+      "laborHoursLarge": 0.055,
+      "unPerHour": 18.2,
       "current": 0.06,
-      "ratio": 0.9,
+      "ratio": 0.92,
       "medianPrice": 1.45,
       "obras": [
         "Continente Cacia",
@@ -79,10 +79,10 @@
     {
       "name": "Cabo UTP cat. 6",
       "task": "Cabo UTP cat. 6",
-      "laborHoursLarge": 0.0271,
-      "unPerHour": 36.9,
+      "laborHoursLarge": 0.028,
+      "unPerHour": 35.7,
       "current": 0.03,
-      "ratio": 0.9,
+      "ratio": 0.93,
       "medianPrice": 0.72,
       "obras": [
         "Continente Cacia"
@@ -91,10 +91,10 @@
     {
       "name": "Cabo XV 3G1,5 mm²",
       "task": "Cabo 1,5 mm² (2–3 condutores)",
-      "laborHoursLarge": 0.0275,
-      "unPerHour": 36.4,
+      "laborHoursLarge": 0.028,
+      "unPerHour": 35.7,
       "current": 0.04,
-      "ratio": 0.69,
+      "ratio": 0.7,
       "medianPrice": 0.74,
       "obras": [
         "Estação Pampilhosa",
@@ -106,8 +106,8 @@
     {
       "name": "Cabo XV 3G2,5 mm²",
       "task": "Cabo 3G2,5 mm²",
-      "laborHoursLarge": 0.0288,
-      "unPerHour": 34.7,
+      "laborHoursLarge": 0.029,
+      "unPerHour": 34.5,
       "current": 0.04,
       "ratio": 0.72,
       "medianPrice": 0.77,
@@ -121,8 +121,8 @@
     {
       "name": "Cabo XV 5G2,5 mm²",
       "task": "Cabo 4G/5G2,5 mm²",
-      "laborHoursLarge": 0.0318,
-      "unPerHour": 31.4,
+      "laborHoursLarge": 0.032,
+      "unPerHour": 31.2,
       "current": 0.05,
       "ratio": 0.64,
       "medianPrice": 0.85,
@@ -135,10 +135,10 @@
     {
       "name": "Cabo XV 5G6 mm²",
       "task": "Cabo 3G/5G6 mm²",
-      "laborHoursLarge": 0.0395,
-      "unPerHour": 25.3,
+      "laborHoursLarge": 0.04,
+      "unPerHour": 25.0,
       "current": 0.06,
-      "ratio": 0.66,
+      "ratio": 0.67,
       "medianPrice": 1.06,
       "obras": [
         "Continente Cacia",
@@ -150,7 +150,7 @@
     {
       "name": "Caixa de derivação de encastrar",
       "task": "Caixa de derivação embebida",
-      "laborHoursLarge": 0.1404,
+      "laborHoursLarge": 0.141,
       "unPerHour": 7.1,
       "current": 0.2,
       "ratio": 0.7,
@@ -163,10 +163,10 @@
     {
       "name": "Caixa de derivação estanque IP55",
       "task": "Caixa de derivação saliente",
-      "laborHoursLarge": 0.1384,
+      "laborHoursLarge": 0.139,
       "unPerHour": 7.2,
       "current": 0.25,
-      "ratio": 0.55,
+      "ratio": 0.56,
       "medianPrice": 3.71,
       "obras": [
         "IEFP Castelo de Paiva",
@@ -224,10 +224,10 @@
     {
       "name": "Detetor de movimento",
       "task": "Detetor de movimento / presença",
-      "laborHoursLarge": 0.3024,
+      "laborHoursLarge": 0.303,
       "unPerHour": 3.3,
       "current": 0.5,
-      "ratio": 0.6,
+      "ratio": 0.61,
       "medianPrice": 8.1,
       "obras": [
         "IEFP Castelo de Paiva",
@@ -239,7 +239,7 @@
     {
       "name": "Elétrodo de terra (vareta 2 m)",
       "task": "Elétrodo de terra",
-      "laborHoursLarge": 0.3101,
+      "laborHoursLarge": 0.311,
       "unPerHour": 3.2,
       "current": 1.0,
       "ratio": 0.31,
@@ -252,8 +252,8 @@
     {
       "name": "Furação para caixas de aparelhagem",
       "task": "Caixa de aparelhagem",
-      "laborHoursLarge": 0.0827,
-      "unPerHour": 12.1,
+      "laborHoursLarge": 0.083,
+      "unPerHour": 12.0,
       "current": 0.15,
       "ratio": 0.55,
       "medianPrice": 2.21,
@@ -266,7 +266,7 @@
     {
       "name": "Interruptor simples",
       "task": "Interruptor simples",
-      "laborHoursLarge": 0.1471,
+      "laborHoursLarge": 0.148,
       "unPerHour": 6.8,
       "current": 0.3,
       "ratio": 0.49,
@@ -283,10 +283,10 @@
     {
       "name": "Inversor de grupo",
       "task": "Inversor de grupo",
-      "laborHoursLarge": 0.1131,
+      "laborHoursLarge": 0.114,
       "unPerHour": 8.8,
       "current": 0.35,
-      "ratio": 0.32,
+      "ratio": 0.33,
       "medianPrice": 3.03,
       "obras": [
         "FC Diegues — Antas",
@@ -297,7 +297,7 @@
     {
       "name": "Painel LED 60x60 40W",
       "task": "Luminária interior (montagem)",
-      "laborHoursLarge": 0.4462,
+      "laborHoursLarge": 0.447,
       "unPerHour": 2.2,
       "current": 0.5,
       "ratio": 0.89,
@@ -312,10 +312,10 @@
     {
       "name": "Tomada estanque IP44",
       "task": "Tomada schuko saliente / estanque",
-      "laborHoursLarge": 0.1486,
+      "laborHoursLarge": 0.149,
       "unPerHour": 6.7,
       "current": 0.35,
-      "ratio": 0.42,
+      "ratio": 0.43,
       "medianPrice": 3.98,
       "obras": [
         "Continente Cacia",
@@ -325,8 +325,8 @@
     {
       "name": "Tomada schuko dupla",
       "task": "Tomada schuko embebida",
-      "laborHoursLarge": 0.1456,
-      "unPerHour": 6.9,
+      "laborHoursLarge": 0.146,
+      "unPerHour": 6.8,
       "current": 0.35,
       "ratio": 0.42,
       "medianPrice": 3.9,
@@ -342,8 +342,8 @@
     {
       "name": "Tomada schuko simples",
       "task": "Tomada schuko embebida",
-      "laborHoursLarge": 0.1456,
-      "unPerHour": 6.9,
+      "laborHoursLarge": 0.146,
+      "unPerHour": 6.8,
       "current": 0.3,
       "ratio": 0.49,
       "medianPrice": 3.9,
@@ -359,8 +359,8 @@
     {
       "name": "Tomada terminal coaxial + RJ45",
       "task": "Tomada de dados RJ45",
-      "laborHoursLarge": 0.2242,
-      "unPerHour": 4.5,
+      "laborHoursLarge": 0.225,
+      "unPerHour": 4.4,
       "current": 0.5,
       "ratio": 0.45,
       "medianPrice": 6.0,
@@ -371,24 +371,10 @@
       ]
     },
     {
-      "name": "Tubo VD 20 mm embebido",
-      "task": "Tubo VD 20",
-      "laborHoursLarge": 0.0491,
-      "unPerHour": 20.4,
-      "current": 0.05,
-      "ratio": 0.98,
-      "medianPrice": 1.31,
-      "obras": [
-        "GARMEP — Arco Living (St. Tirso)",
-        "Continente Cacia",
-        "Estação Pampilhosa"
-      ]
-    },
-    {
       "name": "Tubo VD 25 mm embebido",
       "task": "Tubo VD 25",
-      "laborHoursLarge": 0.0495,
-      "unPerHour": 20.2,
+      "laborHoursLarge": 0.05,
+      "unPerHour": 20.0,
       "current": 0.06,
       "ratio": 0.83,
       "medianPrice": 1.33,
@@ -402,10 +388,10 @@
     {
       "name": "Tubo VD 32 mm embebido",
       "task": "Tubo VD 32",
-      "laborHoursLarge": 0.0583,
-      "unPerHour": 17.2,
+      "laborHoursLarge": 0.059,
+      "unPerHour": 16.9,
       "current": 0.07,
-      "ratio": 0.83,
+      "ratio": 0.84,
       "medianPrice": 1.56,
       "obras": [
         "Continente Cacia"

@@ -153,7 +153,7 @@ identificadores de código em inglês.
 |---|---|
 | `src/lib/db.ts` | Camada de dados **assíncrona** (libSQL). Dois drivers/mesma API: `node:sqlite` local (`await import` dinâmico) + cliente web Turso. Schema, seed, `migrate()`, queries de tudo (inc. `users`/`sessions`). Deletes em cascata explícitos. |
 | `src/lib/session.ts` | Auth por sessão: bcrypt, `startSession`/`getCurrentUser`/`requireUser`/`requireOwner`/`endSession`. Usado em páginas/ações (Node), NÃO no proxy (edge). |
-| `src/lib/calc.ts` | Fórmula de preços: `preço = mat×qtd×(1+margem_mat) + horas×€/h×qtd×(1+margem_MO)`; IVA; formatação pt-PT |
+| `src/lib/calc.ts` | Fórmula de preços: `P.Unit = ⌈mat×(1+margem_mat) + horas×€/h×(1+margem_MO)⌉ ao cêntimo` e `total = qtd × P.Unit` (o cliente tem de conseguir refazer a conta). **Regras do Pedro:** horas com 3 casas decimais no máximo e arredondamento sempre para cima (`round3`, `ceilCents` — nunca tira €); IVA; formatação pt-PT |
 | `src/lib/seed-data.ts` | ~75 artigos PT de referência + capítulos por defeito |
 | `src/lib/pdf.tsx` | PDF (versão **interna** com custos/margem, versão **cliente** só preços). Não usar Intl no PDF (espaços U+202F quebram WinAnsi) |
 | `src/proxy.ts` | Gate grosseiro no edge: redireciona para `/login` se não houver cookie `kably_session` (validação real é server-side em `requireUser`) |

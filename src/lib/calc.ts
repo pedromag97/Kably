@@ -64,17 +64,28 @@ export function itemTotals(item: BudgetItem, b: MarginParams): ItemTotals {
   const materialCost = item.materialCost * item.quantity;
   const billedMaterial = billsMaterial ? materialCost : 0;
   const laborCost = billsLabor ? item.laborHours * b.laborRate * item.quantity : 0;
-  const price =
-    billedMaterial * (1 + b.materialMargin / 100) + laborCost * (1 + b.laborMargin / 100);
+  // Primeiro chega-se ao preço UNITÁRIO, arredondado ao cêntimo para cima; o total
+  // da linha é só Qtd × P. Unit. — é a conta que o cliente consegue refazer
+  // (720 × 2,50 € tem de dar 1.800,00 €, não 1.797,59 €).
+  const unitPrice = ceilCents(
+    (billsMaterial ? item.materialCost : 0) * (1 + b.materialMargin / 100) +
+      (billsLabor ? item.laborHours * b.laborRate : 0) * (1 + b.laborMargin / 100)
+  );
+  const price = Math.round(unitPrice * item.quantity * 100) / 100;
   return {
     materialCost,
     laborCost,
     cost: billedMaterial + laborCost,
     price,
-    unitPrice: item.quantity > 0 ? price / item.quantity : 0,
+    unitPrice,
     billsMaterial,
     billsLabor,
   };
+}
+
+/** Arredonda ao cêntimo, sempre para cima (regra: o arredondamento nunca tira €). */
+export function ceilCents(n: number): number {
+  return n <= 0 ? 0 : Math.ceil(n * 100 - 1e-9) / 100;
 }
 
 export type ChapterTotals = { cost: number; price: number };
@@ -170,6 +181,25 @@ export function invertRate(v: number): number {
 }
 
 /**
+ * Horas por unidade guardam-se e mostram-se com 3 casas decimais, nunca mais —
+ * e arredondam-se sempre PARA CIMA: mais horas é mais €, nunca menos.
+ * (o −1e-9 evita que 0,1×3 = 0,30000000000000004 suba para 0,301)
+ */
+export function round3(n: number): number {
+  return n <= 0 ? 0 : Math.ceil(n * 1000 - 1e-9) / 1000;
+}
+
+const hoursFmt = new Intl.NumberFormat("pt-PT", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+});
+
+/** Texto de horas por unidade para tabelas (máx. 3 casas), ex.: 0,147. */
+export function hoursLabel(n: number): string {
+  return hoursFmt.format(round3(n));
+}
+
+/**
  * Texto a mostrar no campo de mão de obra conforme a vista escolhida.
  * O valor exato (h/un) guarda-se à parte — trocar de vista nunca deve
  * alterar o preço por arredondamento do ida-e-volta.
@@ -179,14 +209,14 @@ export function laborFieldText(hours: number, mode: "H" | "R", crew = 1): string
   // `hours` são sempre horas-HOMEM; com equipa mostra-se o tempo de relógio da equipa.
   const teamHours = hours / crew;
   return mode === "H"
-    ? String(Math.round(teamHours * 10000) / 10000)
-    : String(Math.round(invertRate(teamHours) * 10000) / 10000);
+    ? String(round3(teamHours))
+    : String(Math.round(invertRate(teamHours) * 100) / 100);
 }
 
-/** Inverso de `laborFieldText`: o número escrito no campo → horas-homem por unidade. */
+/** Inverso de `laborFieldText`: o número escrito no campo → horas-homem por unidade (3 casas). */
 export function laborFromField(n: number, mode: "H" | "R", crew = 1): number {
   const teamHours = mode === "H" ? n : invertRate(n);
-  return teamHours * crew;
+  return round3(teamHours * crew);
 }
 
 /** Unidades por hora, ex.: 0,25 h/un → "4 un/h". */

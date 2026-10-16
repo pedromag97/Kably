@@ -5,11 +5,13 @@ import { useMemo, useState, useTransition } from "react";
 import type { Article } from "@/lib/types";
 import {
   eur,
+  hoursLabel,
   invertRate,
   laborFieldText,
   minutesLabel,
   perDayLabel,
   perHourLabel,
+  round3,
 } from "@/lib/calc";
 import {
   createArticleAction,
@@ -60,7 +62,7 @@ function LaborInput({
   const onValue = (text: string) => {
     setValue(text);
     const n = parseNum(text);
-    setHours(mode === "H" ? n : invertRate(n));
+    setHours(round3(mode === "H" ? n : invertRate(n)));
   };
 
   return (
@@ -284,7 +286,7 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
                 <td className="px-2 py-2 text-slate-500">{a.category}</td>
                 <td className="px-2 py-2 text-center text-slate-500">{a.unit}</td>
                 <td className="px-2 py-2 text-right">{eur(a.materialCost)}</td>
-                <td className="px-2 py-2 text-right">{a.laborHours}</td>
+                <td className="px-2 py-2 text-right">{hoursLabel(a.laborHours)}</td>
                 <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">
                   {minutesLabel(a.laborHours)}
                 </td>
@@ -295,7 +297,7 @@ export default function ArticlesManager({ articles }: { articles: Article[] }) {
                   className="px-2 py-2 text-right text-emerald-700 whitespace-nowrap"
                   title={a.laborHoursLarge > 0 ? `${perHourLabel(a.laborHoursLarge)} por hora` : undefined}
                 >
-                  {a.laborHoursLarge > 0 ? a.laborHoursLarge : "—"}
+                  {a.laborHoursLarge > 0 ? hoursLabel(a.laborHoursLarge) : "—"}
                 </td>
                 <td className="px-2 py-2 text-right whitespace-nowrap">
                   <button

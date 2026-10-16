@@ -7,7 +7,7 @@ import * as store from "@/lib/db";
 import { DEFAULT_CHAPTERS } from "@/lib/seed-data";
 import { endSession, requireOwner, requireUser } from "@/lib/session";
 import { emailButton, emailLayout, getBaseUrl, sendEmail } from "@/lib/email";
-import { articleHours } from "@/lib/calc";
+import { articleHours, round3 } from "@/lib/calc";
 import type { VatMode, WorkProfile } from "@/lib/types";
 
 function escapeHtml(s: string): string {
@@ -314,7 +314,7 @@ export async function updateItemAction(
   item: { name: string; unit: string; quantity: number; materialCost: number; laborHours: number }
 ) {
   if (!(await ownedBudget(budgetId))) return;
-  await store.updateItem(budgetId, itemId, item);
+  await store.updateItem(budgetId, itemId, { ...item, laborHours: round3(item.laborHours) });
   revalidatePath(`/orcamentos/${budgetId}`);
 }
 
@@ -529,8 +529,8 @@ export async function createArticleAction(fd: FormData) {
     category: str(fd, "category") || "Diversos",
     unit: str(fd, "unit") || "un",
     materialCost: flt(fd, "materialCost"),
-    laborHours: flt(fd, "laborHours"),
-    laborHoursLarge: flt(fd, "laborHoursLarge"),
+    laborHours: round3(flt(fd, "laborHours")),
+    laborHoursLarge: round3(flt(fd, "laborHoursLarge")),
     notes: str(fd, "notes"),
   });
   revalidatePath("/artigos");
@@ -545,8 +545,8 @@ export async function updateArticleAction(articleId: number, fd: FormData) {
     category: str(fd, "category") || "Diversos",
     unit: str(fd, "unit") || "un",
     materialCost: flt(fd, "materialCost"),
-    laborHours: flt(fd, "laborHours"),
-    laborHoursLarge: flt(fd, "laborHoursLarge"),
+    laborHours: round3(flt(fd, "laborHours")),
+    laborHoursLarge: round3(flt(fd, "laborHoursLarge")),
     notes: str(fd, "notes"),
   });
   revalidatePath("/artigos");
