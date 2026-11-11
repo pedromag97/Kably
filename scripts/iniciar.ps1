@@ -5,6 +5,7 @@
 # O endereço público fica guardado em:
 #   - data\tunnel-url.txt (na pasta do projeto)
 #   - "Kably - endereco.txt" no Ambiente de Trabalho
+#   - "Kably - endereco.txt" no pCloud (se o disco P: estiver montado)
 # Se TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID estiverem no .env.local,
 # o endereço é também enviado por Telegram a cada arranque.
 $ErrorActionPreference = "Stop"
@@ -61,7 +62,15 @@ if (-not $url) {
 
 # 3) Registar o endereço onde o Pedro o encontra
 $stamp = Get-Date -Format "dd/MM/yyyy HH:mm"
-$note = "Kably acessível em:`r`n$url`r`n`r`n(arrancado em $stamp — o endereço muda a cada reinício do túnel)"
+$ip = (Get-NetIPAddress -AddressFamily IPv4 |
+  Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.InterfaceAlias -notmatch "Loopback|vEthernet|WSL" } |
+  Select-Object -First 1).IPAddress
+$lines = @("Kably acessível em:", "", "  Internet (qualquer lado):  $url")
+if ($ip) { $lines += "  Mesma rede (Wi-Fi/cabo):   http://${ip}:3000" }
+$lines += "  Neste PC:                  http://localhost:3000"
+$lines += ""
+$lines += "(arrancado em $stamp — o endereço da internet muda a cada reinício do túnel)"
+$note = $lines -join "`r`n"
 New-Item -ItemType Directory -Force (Join-Path $root "data") | Out-Null
 $note | Out-File -Encoding utf8 (Join-Path $root "data\tunnel-url.txt")
 $note | Out-File -Encoding utf8 (Join-Path ([Environment]::GetFolderPath("Desktop")) "Kably - endereco.txt")
@@ -82,6 +91,16 @@ if (Test-Path $envFile) {
       Write-Host "Falha ao enviar por Telegram: $($_.Exception.Message)" -ForegroundColor Yellow
     }
   }
+}
+
+# 5) Cópia da nota no pCloud. O disco P: monta uns segundos depois do arranque
+#    do Windows — esperar um pouco, e seguir em frente se não aparecer.
+$pcloud = "P:\Geral-pCloud\Lsc-Pedro\07 KABLY"
+$tries = 0
+while (-not (Test-Path $pcloud) -and $tries -lt 30) { Start-Sleep -Seconds 2; $tries++ }
+if (Test-Path $pcloud) {
+  try { $note | Out-File -Encoding utf8 (Join-Path $pcloud "Kably - endereco.txt") }
+  catch { Write-Host "Falha ao escrever a nota no pCloud: $($_.Exception.Message)" -ForegroundColor Yellow }
 }
 
 Write-Host ""
