@@ -6,8 +6,6 @@
 #   - data\tunnel-url.txt (na pasta do projeto)
 #   - "Kably - endereco.txt" no Ambiente de Trabalho
 #   - "Kably - endereco.txt" no pCloud (se o disco P: estiver montado)
-# Se TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID estiverem no .env.local,
-# o endereço é também enviado por Telegram sempre que muda.
 #
 # Depois de arrancar, o script verifica de minuto a minuto se o servidor e o
 # túnel respondem. Os túneis gratuitos caem sem aviso (p. ex. depois de o PC
@@ -74,7 +72,7 @@ function Start-Tunnel {
   return $null
 }
 
-# Regista o endereço onde o Pedro o encontra: ficheiros, Telegram e pCloud.
+# Regista o endereço onde o Pedro o encontra: ficheiros locais e pCloud.
 function Publish-Address($url) {
   $stamp = Get-Date -Format "dd/MM/yyyy HH:mm"
   $ip = (Get-NetIPAddress -AddressFamily IPv4 |
@@ -89,24 +87,6 @@ function Publish-Address($url) {
   New-Item -ItemType Directory -Force (Join-Path $root "data") | Out-Null
   $note | Out-File -Encoding utf8 (Join-Path $root "data\tunnel-url.txt")
   $note | Out-File -Encoding utf8 (Join-Path ([Environment]::GetFolderPath("Desktop")) "Kably - endereco.txt")
-
-  # Telegram (opcional): envia o endereço se houver credenciais no .env.local
-  $envFile = Join-Path $root ".env.local"
-  if (Test-Path $envFile) {
-    $envVars = @{}
-    Get-Content $envFile | Where-Object { $_ -match "^\s*([^#=]+)=(.*)$" } | ForEach-Object {
-      $envVars[$Matches[1].Trim()] = $Matches[2].Trim()
-    }
-    if ($envVars["TELEGRAM_BOT_TOKEN"] -and $envVars["TELEGRAM_CHAT_ID"]) {
-      try {
-        $body = @{ chat_id = $envVars["TELEGRAM_CHAT_ID"]; text = "⚡ Kably no ar: $url" }
-        Invoke-RestMethod -Uri "https://api.telegram.org/bot$($envVars['TELEGRAM_BOT_TOKEN'])/sendMessage" -Method Post -Body $body | Out-Null
-        Write-Host "Endereço enviado por Telegram." -ForegroundColor Green
-      } catch {
-        Write-Host "Falha ao enviar por Telegram: $($_.Exception.Message)" -ForegroundColor Yellow
-      }
-    }
-  }
 
   # Cópia da nota no pCloud. O disco P: monta uns segundos depois do arranque
   # do Windows — esperar um pouco, e seguir em frente se não aparecer.
